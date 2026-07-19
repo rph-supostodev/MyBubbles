@@ -3751,13 +3751,23 @@ function moderationStatusLabel(value) {
 }
 
 async function api(url, options = {}) {
-  const response = await fetch(url, {
-    method: options.method || "GET",
-    credentials: "same-origin",
-    headers: options.body ? { "Content-Type": "application/json" } : undefined,
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
-  const data = await response.json();
+  let response;
+  try {
+    response = await fetch(url, {
+      method: options.method || "GET",
+      credentials: "same-origin",
+      headers: options.body ? { "Content-Type": "application/json" } : undefined,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+  } catch {
+    throw new Error("Não foi possível conectar ao servidor. Verifique se o MyAlbums está rodando em http://localhost:3000.");
+  }
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("O servidor respondeu em um formato inesperado.");
+  }
   if (!response.ok) throw new Error(data.error || "Erro na requisição.");
   return data.db || data;
 }
