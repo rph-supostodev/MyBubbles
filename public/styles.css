@@ -1128,7 +1128,8 @@ h3 {
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.46);
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 16px 44px rgba(36, 48, 65, 0.10);
 }
 
 .community-content-switch button,
@@ -1146,9 +1147,9 @@ h3 {
 
 .community-content-switch button.active,
 .community-content-filter button.active {
-  background: var(--pink);
-  color: #101622;
-  box-shadow: 0 12px 26px rgba(255, 159, 67, 0.2);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
 }
 
 .community-content-switch em {
@@ -1157,7 +1158,7 @@ h3 {
   display: inline-grid;
   place-items: center;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.24);
+  background: rgba(21, 129, 191, 0.12);
   color: inherit;
   font-size: 12px;
   font-style: normal;
@@ -1709,6 +1710,16 @@ h3 {
 [data-theme="dark"] .community-tabs button.active .community-tab-icon {
   background: var(--pink);
   color: #08111f;
+}
+
+[data-theme="dark"] .community-content-switch,
+[data-theme="dark"] .community-content-filter {
+  background: rgba(24, 35, 53, 0.72);
+}
+
+[data-theme="dark"] .community-content-switch button.active,
+[data-theme="dark"] .community-content-filter button.active {
+  background: var(--surface-soft);
 }
 
 [data-theme="dark"] .floating-podcast-player {
