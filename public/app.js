@@ -3875,8 +3875,10 @@ function formatDate(value) {
 }
 
 function formatBrazilPhone(value) {
-  let digits = String(value || "").replace(/\D/g, "");
-  if (digits.startsWith("55") && digits.length > 11) digits = digits.slice(2);
+  const raw = String(value || "");
+  let digits = raw.replace(/\D/g, "");
+  if (raw.trim().startsWith("+55")) digits = digits.slice(2);
+  else if (digits.startsWith("55") && digits.length > 11) digits = digits.slice(2);
   digits = digits.slice(0, 11);
   if (!digits) return "";
   if (digits.length <= 2) return `+55 (${digits}`;
