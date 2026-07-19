@@ -1,0 +1,19 @@
+{
+  "name": "MyAlbums",
+  "short_name": "MyAlbums",
+  "icons": [
+    {
+      "src": "/assets/myalbums-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/myalbums-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#0d1523",
+  "background_color": "#0d1523",
+  "display": "standalone"
+}

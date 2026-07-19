@@ -1,0 +1,22 @@
+{
+  "name": "sistema-albuns-musica",
+  "version": "1.0.0",
+  "description": "ERP local para controle de albuns ouvidos com integracao Spotify.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "db:seed": "node scripts/seed-and-migrate.js"
+  },
+  "keywords": [
+    "musica",
+    "spotify",
+    "erp",
+    "albuns"
+  ],
+  "author": "",
+  "license": "MIT"
+}
