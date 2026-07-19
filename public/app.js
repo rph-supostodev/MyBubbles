@@ -479,6 +479,10 @@ function SignupModal({ onClose, onRegistered }) {
     setForm((current) => ({ ...current, [name]: value }));
   }
 
+  function updateBrazilPhoneField(name, value) {
+    updateField(name, formatBrazilPhone(value));
+  }
+
   async function submit(event) {
     event.preventDefault();
     setLoading(true);
@@ -507,8 +511,8 @@ function SignupModal({ onClose, onRegistered }) {
         h(AdminInput, { label: "Email", type: "email", value: form.email, onChange: (value) => updateField("email", value), required: true }),
         h(AdminInput, { label: "Senha", type: "password", value: form.password, onChange: (value) => updateField("password", value), required: true }),
         h(AdminInput, { label: "Confirmar senha", type: "password", value: form.confirmPassword, onChange: (value) => updateField("confirmPassword", value), required: true }),
-        h(AdminInput, { label: "Celular", value: form.phone, onChange: (value) => updateField("phone", value), icon: Phone }),
-        h(AdminInput, { label: "WhatsApp", value: form.whatsapp, onChange: (value) => updateField("whatsapp", value), icon: Phone }),
+        h(AdminInput, { label: "Celular", value: form.phone, onChange: (value) => updateBrazilPhoneField("phone", value), icon: Phone, inputMode: "numeric", maxLength: 19, placeholder: "+55 (81) 99938-0162" }),
+        h(AdminInput, { label: "WhatsApp", value: form.whatsapp, onChange: (value) => updateBrazilPhoneField("whatsapp", value), icon: Phone, inputMode: "numeric", maxLength: 19, placeholder: "+55 (81) 99938-0162" }),
         message ? h("div", { className: "login-message full" }, message) : null,
         h("div", { className: "form-actions full" },
           h("button", { className: "primary-btn", disabled: loading },
@@ -2996,10 +3000,10 @@ function AdminUsersView({ notify, currentUser }) {
   );
 }
 
-function AdminInput({ label, value, onChange, type = "text", required = false, icon: Icon }) {
+function AdminInput({ label, value, onChange, type = "text", required = false, icon: Icon, inputMode, maxLength, placeholder }) {
   return h("label", { className: "field" },
     h("span", null, Icon ? h(Icon, { size: 14 }) : null, label),
-    h("input", { type, value, required, onChange: (event) => onChange(event.target.value) })
+    h("input", { type, value, required, inputMode, maxLength, placeholder, onChange: (event) => onChange(event.target.value) })
   );
 }
 
@@ -3868,6 +3872,20 @@ function formatDate(value) {
   const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!match) return value || "";
   return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function formatBrazilPhone(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("55") && digits.length > 11) digits = digits.slice(2);
+  digits = digits.slice(0, 11);
+  if (!digits) return "";
+  if (digits.length <= 2) return `+55 (${digits}`;
+
+  const ddd = digits.slice(0, 2);
+  const number = digits.slice(2);
+  const splitAt = number.length > 8 ? 5 : 4;
+  if (number.length <= splitAt) return `+55 (${ddd}) ${number}`;
+  return `+55 (${ddd}) ${number.slice(0, splitAt)}-${number.slice(splitAt)}`;
 }
 
 function approvalStatusLabel(value) {

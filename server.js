@@ -2343,8 +2343,8 @@ function normalizeUserPayload(payload, requirePassword) {
   const role = ["admin", "user"].includes(payload.role) ? payload.role : "user";
   const status = ["active", "inactive"].includes(payload.status) ? payload.status : "active";
   const bio = clean(payload.bio);
-  const phone = clean(payload.phone || payload.celular).slice(0, 40);
-  const whatsapp = clean(payload.whatsapp).slice(0, 40);
+  const phone = normalizeBrazilPhone(payload.phone || payload.celular, "celular");
+  const whatsapp = normalizeBrazilPhone(payload.whatsapp, "WhatsApp");
   const payloadApproval = clean(payload.approvalStatus || payload.approval_status);
   const approvalStatus = ["pending", "approved", "rejected"].includes(payloadApproval)
     ? payloadApproval
@@ -2363,8 +2363,8 @@ function normalizeSignupPayload(payload) {
   const email = clean(payload.email).toLowerCase();
   const password = String(payload.password || "");
   const confirmPassword = String(payload.confirmPassword || "");
-  const phone = clean(payload.phone || payload.celular).slice(0, 40);
-  const whatsapp = clean(payload.whatsapp).slice(0, 40);
+  const phone = normalizeBrazilPhone(payload.phone || payload.celular, "celular");
+  const whatsapp = normalizeBrazilPhone(payload.whatsapp, "WhatsApp");
 
   if (!name) throw publicError("Informe seu nome.");
   if (!email || !email.includes("@")) throw publicError("Informe um email valido.");
@@ -3811,6 +3811,24 @@ function sendText(res, status, text) {
 
 function clean(value) {
   return String(value || "").trim();
+}
+
+function normalizeBrazilPhone(value, label = "telefone") {
+  const raw = clean(value);
+  if (!raw) return "";
+
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("55") && digits.length > 11) digits = digits.slice(2);
+  digits = digits.slice(0, 11);
+
+  if (digits.length < 10) {
+    throw publicError(`Informe um ${label} brasileiro com DDD e numero.`);
+  }
+
+  const ddd = digits.slice(0, 2);
+  const number = digits.slice(2);
+  const splitAt = number.length > 8 ? 5 : 4;
+  return `+55 (${ddd}) ${number.slice(0, splitAt)}-${number.slice(splitAt)}`;
 }
 
 function titleCase(value) {
