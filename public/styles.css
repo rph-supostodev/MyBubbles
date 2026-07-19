@@ -3784,6 +3784,17 @@ table {
   max-width: 760px;
 }
 
+.signup-approval-note {
+  margin: 6px 0 18px;
+  padding: 13px 15px;
+  border: 1px solid rgba(255, 159, 67, 0.34);
+  border-radius: 16px;
+  color: var(--text);
+  background: rgba(255, 159, 67, 0.12);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .community-readonly {
   margin-bottom: 14px;
 }

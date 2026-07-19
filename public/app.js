@@ -499,6 +499,9 @@ function SignupModal({ onClose, onRegistered }) {
         h("div", null, h("p", null, "Comunidade"), h("h2", null, "Criar conta")),
         h("button", { className: "ghost-btn small", type: "button", onClick: onClose }, "Fechar")
       ),
+      h("div", { className: "signup-approval-note" },
+        "Seu cadastro precisa ser aprovado por um Administrador, sendo assim, após o cadastro, aguarde a confirmação para que possa utilizar a plataforma."
+      ),
       h("form", { className: "form-grid", onSubmit: submit, autoComplete: "off" },
         h(AdminInput, { label: "Nome", value: form.name, onChange: (value) => updateField("name", value), required: true }),
         h(AdminInput, { label: "Email", type: "email", value: form.email, onChange: (value) => updateField("email", value), required: true }),
