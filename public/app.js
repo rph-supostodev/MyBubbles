@@ -761,6 +761,9 @@ function NewsView({ reload, notify, user, openPublicProfile, onPodcastPlaybackCh
   const [newsItems, setNewsItems] = useState([]);
   const [articles, setArticles] = useState([]);
   const [podcasts, setPodcasts] = useState([]);
+  const [communityContent, setCommunityContent] = useState({ articles: [], podcasts: [] });
+  const [communityContentType, setCommunityContentType] = useState("articles");
+  const [communityContentScope, setCommunityContentScope] = useState("all");
   const [friends, setFriends] = useState([]);
   const [cursor, setCursor] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -803,6 +806,15 @@ function NewsView({ reload, notify, user, openPublicProfile, onPodcastPlaybackCh
   async function loadFriends() {
     const data = await api("/api/mydearfriends");
     setFriends(data.users || []);
+  }
+
+  async function loadCommunityContent(scope = communityContentScope) {
+    const effectiveScope = user && scope === "favorites" ? "favorites" : "all";
+    const data = await api(`/api/community-content?filter=${encodeURIComponent(effectiveScope)}`);
+    setCommunityContent({
+      articles: data.articles || [],
+      podcasts: data.podcasts || []
+    });
   }
 
   async function toggleFriendFavorite(friend) {
@@ -853,6 +865,10 @@ function NewsView({ reload, notify, user, openPublicProfile, onPodcastPlaybackCh
   }, []);
 
   useEffect(() => {
+    loadCommunityContent().catch((error) => notify(error.message));
+  }, [communityContentScope]);
+
+  useEffect(() => {
     function refreshNews() {
       loadCommunityNews(0, true);
     }
@@ -870,7 +886,8 @@ function NewsView({ reload, notify, user, openPublicProfile, onPodcastPlaybackCh
   const tabs = [
     ["news", "News", "Noticias do TMDQA", Newspaper],
     ["editorial", "Editorial", "Artigos da plataforma", BookOpen],
-    ["podcast", "Podcast", "Episodios dos admins", Headphones]
+    ["podcast", "Podcast", "Episodios dos admins", Headphones],
+    ["community-content", "Conteúdo Comunidade", "Textos e podcasts dos usuários", Library]
   ];
   if (user) tabs.push(["friends", "MyDearFriends", "Perfis da comunidade", Users]);
 
@@ -912,6 +929,17 @@ function NewsView({ reload, notify, user, openPublicProfile, onPodcastPlaybackCh
     communityTab === "news" ? h(CommunityNewsArea, { featured, tray, stories, loading, cursor, cacheMessage, loadCommunityNews, viewNews }) : null,
     communityTab === "editorial" ? h(CommunityEditorialArea, { featuredArticle, otherArticles, isAdmin, viewArticle, setEditingArticle, deleteArticle }) : null,
     communityTab === "podcast" ? h(CommunityPodcastArea, { featuredPodcast, otherPodcasts, isAdmin, viewPodcast, setEditingPodcast, deletePodcast, onPodcastPlaybackChange }) : null,
+    communityTab === "community-content" ? h(CommunityContentArea, {
+      content: communityContent,
+      contentType: communityContentType,
+      setContentType: setCommunityContentType,
+      scope: communityContentScope,
+      setScope: setCommunityContentScope,
+      user,
+      viewArticle,
+      viewPodcast,
+      onPodcastPlaybackChange
+    }) : null,
     communityTab === "friends" ? h(MyDearFriendsArea, { friends, openPublicProfile, reload: loadFriends, onToggleFavorite: toggleFriendFavorite }) : null,
     selectedNews ? h(CommunityNewsDetailModal, { item: selectedNews, onClose: () => setSelectedNews(null) }) : null,
     selectedArticle ? h(ArticleDetailModal, { article: selectedArticle, onClose: () => setSelectedArticle(null), isAdmin, openPublicProfile, canComment: Boolean(user), onEdit: (article) => { setSelectedArticle(null); setEditingArticle(article); } }) : null,
@@ -1052,6 +1080,102 @@ function CommunityPodcastArea({ featuredPodcast, otherPodcasts, isAdmin, viewPod
           )
         )
       : h(EmptyState, { text: isAdmin ? "Cadastre o primeiro episodio de Podcast da Comunidade." : "Nenhum episodio publicado ainda." })
+  );
+}
+
+function CommunityContentArea({ content, contentType, setContentType, scope, setScope, user, viewArticle, viewPodcast, onPodcastPlaybackChange }) {
+  const articles = content.articles || [];
+  const podcasts = content.podcasts || [];
+  const isArticleTab = contentType === "articles";
+  const currentItems = isArticleTab ? articles : podcasts;
+
+  function changeScope(nextScope) {
+    if (!user && nextScope === "favorites") return;
+    setScope(nextScope);
+  }
+
+  return h("section", { className: "community-content-panel" },
+    h("div", { className: "news-section-title" },
+      h("span", null, "Conteúdo Comunidade"),
+      h("small", null, "Produções publicadas pelos perfis do MyAlbums")
+    ),
+    h("div", { className: "community-content-tools" },
+      h("div", { className: "community-content-switch", role: "tablist", "aria-label": "Tipo de conteúdo da comunidade" },
+        h("button", {
+          type: "button",
+          className: isArticleTab ? "active" : "",
+          onClick: () => setContentType("articles")
+        }, h(BookOpen, { size: 16 }), "Artigos", h("em", null, articles.length)),
+        h("button", {
+          type: "button",
+          className: !isArticleTab ? "active" : "",
+          onClick: () => setContentType("podcasts")
+        }, h(Headphones, { size: 16 }), "Podcasts", h("em", null, podcasts.length))
+      ),
+      h("div", { className: "community-content-filter", "aria-label": "Filtro de conteúdo" },
+        h("button", {
+          type: "button",
+          className: scope === "all" ? "active" : "",
+          onClick: () => changeScope("all")
+        }, h(Users, { size: 15 }), "Toda comunidade"),
+        user ? h("button", {
+          type: "button",
+          className: scope === "favorites" ? "active" : "",
+          onClick: () => changeScope("favorites")
+        }, h(Star, { size: 15 }), "MyDearFriends") : h("span", null, "Entre para filtrar seus favoritos")
+      )
+    ),
+    currentItems.length
+      ? h("div", { className: "community-content-list" },
+          currentItems.map((item) => isArticleTab
+            ? h(CommunityContentArticleCard, { key: item.id, article: item, onView: viewArticle })
+            : h(CommunityContentPodcastCard, { key: item.id, episode: item, onView: viewPodcast, onPodcastPlaybackChange })
+          )
+        )
+      : h(EmptyState, {
+          text: scope === "favorites"
+            ? "Nenhum conteúdo publicado pelos seus favoritos ainda."
+            : isArticleTab
+              ? "Nenhum artigo da comunidade publicado ainda."
+              : "Nenhum podcast da comunidade publicado ainda."
+        })
+  );
+}
+
+function CommunityContentArticleCard({ article, onView }) {
+  return h("article", { className: "community-content-card" },
+    h("button", { className: "community-content-cover", type: "button", onClick: () => onView(article), title: "Ler artigo" },
+      h(SafeImage, { src: article.coverUrl, className: "community-content-cover-image", fallbackClassName: "community-content-fallback", fallbackIcon: h(BookOpen, { size: 28 }) })
+    ),
+    h("div", { className: "community-content-copy" },
+      h("p", null, "Artigo da comunidade"),
+      h("h3", null, article.title),
+      h("span", null, `${article.authorName || "Usuário"} · ${formatDate(article.publishedAt || article.updatedAt)}`),
+      h("em", null, article.summary || "Texto publicado no perfil deste usuário."),
+      h("div", { className: "community-content-actions" },
+        h("button", { className: "ghost-btn", type: "button", onClick: () => onView(article) }, h(Eye, { size: 15 }), "Ler artigo"),
+        h("small", null, `${article.commentsCount || 0} comentários`)
+      )
+    )
+  );
+}
+
+function CommunityContentPodcastCard({ episode, onView, onPodcastPlaybackChange }) {
+  return h("article", { className: "community-content-card community-content-card-podcast" },
+    h("button", { className: "community-content-cover", type: "button", onClick: () => onView(episode), title: "Ver podcast" },
+      h(SafeImage, { src: episode.coverUrl, className: "community-content-cover-image", fallbackClassName: "community-content-fallback", fallbackIcon: h(Headphones, { size: 28 }) })
+    ),
+    h("div", { className: "community-content-copy" },
+      h("p", null, "Podcast da comunidade"),
+      h("h3", null, episode.title),
+      h("span", null, `${episode.authorName || "Usuário"} · ${formatDate(episode.publishedAt || episode.updatedAt)}${episode.durationMin ? ` · ${episode.durationMin} min` : ""}`),
+      h("em", null, episode.summary || episode.description || "Episódio publicado no perfil deste usuário."),
+      episode.playbackAudioUrl ? h(PodcastInlinePlayer, { episode, onPodcastPlaybackChange }) : null,
+      h("div", { className: "community-content-actions" },
+        h("button", { className: "ghost-btn", type: "button", onClick: () => onView(episode) }, h(Eye, { size: 15 }), "Ver episódio"),
+        h("small", null, `${episode.commentsCount || 0} comentários`)
+      )
+    )
   );
 }
 

@@ -261,6 +261,7 @@ async function handleApi(req, res, url) {
 function isPublicReadRoute(req, url) {
   if (req.method !== "GET") return false;
   return url.pathname === "/api/news/releases"
+    || url.pathname === "/api/community-content"
     || url.pathname === "/api/articles"
     || url.pathname.startsWith("/api/articles/")
     || url.pathname === "/api/podcasts"
@@ -275,6 +276,14 @@ async function handlePublicReadApi(req, res, url) {
     const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 12), 1), 20);
     const cursor = Math.max(Number(url.searchParams.get("cursor") || 0), 0);
     sendJson(res, 200, readCommunityNews({ limit, cursor }));
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/community-content") {
+    sendJson(res, 200, readCommunityContent({
+      viewer: req.user,
+      filter: clean(url.searchParams.get("filter"))
+    }));
     return;
   }
 
@@ -1317,6 +1326,7 @@ function articleToApi(row) {
     id: row.id,
     authorId: row.author_id,
     authorName: row.author_name,
+    authorAvatarUrl: row.author_avatar_url || "",
     scope: row.scope || "community",
     title: row.title,
     slug: row.slug,
@@ -1612,6 +1622,7 @@ function podcastEpisodeToApi(row) {
     id: row.id,
     authorId: row.author_id,
     authorName: row.author_name,
+    authorAvatarUrl: row.author_avatar_url || "",
     scope: row.scope || "community",
     title: row.title,
     slug: row.slug,
@@ -1627,6 +1638,62 @@ function podcastEpisodeToApi(row) {
     publishedAt: row.published_at || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  };
+}
+
+function readCommunityContent({ viewer, filter = "" } = {}) {
+  const db = getDatabase();
+  const onlyFavorites = filter === "favorites" && viewer?.id;
+  const favoriteJoin = onlyFavorites
+    ? "JOIN friend_favorites ff ON ff.friend_user_id = items.author_id AND ff.user_id = :viewer_id"
+    : "";
+  const favoriteParams = onlyFavorites ? { viewer_id: viewer.id } : {};
+  const articleRows = db.prepare(`
+    SELECT items.*,
+      users.name AS author_name,
+      users.avatar_url AS author_avatar_url,
+      (
+        SELECT COUNT(*)
+        FROM community_comments cc
+        WHERE cc.target_type = 'article'
+          AND cc.target_id = items.id
+          AND cc.status = 'active'
+      ) AS comments_count
+    FROM articles items
+    JOIN users ON users.id = items.author_id
+    ${favoriteJoin}
+    WHERE items.scope = 'profile'
+      AND items.status = 'published'
+      AND users.status = 'active'
+    ORDER BY COALESCE(items.published_at, items.updated_at) DESC
+    LIMIT 60
+  `).all(favoriteParams);
+
+  const podcastRows = db.prepare(`
+    SELECT items.*,
+      users.name AS author_name,
+      users.avatar_url AS author_avatar_url,
+      (
+        SELECT COUNT(*)
+        FROM community_comments cc
+        WHERE cc.target_type = 'podcast'
+          AND cc.target_id = items.id
+          AND cc.status = 'active'
+      ) AS comments_count
+    FROM podcast_episodes items
+    JOIN users ON users.id = items.author_id
+    ${favoriteJoin}
+    WHERE items.scope = 'profile'
+      AND items.status = 'published'
+      AND users.status = 'active'
+    ORDER BY COALESCE(items.published_at, items.updated_at) DESC
+    LIMIT 60
+  `).all(favoriteParams);
+
+  return {
+    filter: onlyFavorites ? "favorites" : "all",
+    articles: articleRows.map(articleToApi),
+    podcasts: podcastRows.map(podcastEpisodeToApi)
   };
 }
 

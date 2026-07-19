@@ -1102,6 +1102,167 @@ h3 {
   box-shadow: var(--shadow);
 }
 
+.community-content-panel {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.community-content-tools {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.community-content-switch,
+.community-content-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.community-content-switch button,
+.community-content-filter button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.community-content-switch button.active,
+.community-content-filter button.active {
+  background: var(--pink);
+  color: #101622;
+  box-shadow: 0 12px 26px rgba(255, 159, 67, 0.2);
+}
+
+.community-content-switch em {
+  min-width: 22px;
+  min-height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+  color: inherit;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.community-content-filter span {
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.community-content-list {
+  display: grid;
+  gap: 14px;
+}
+
+.community-content-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface-soft);
+}
+
+.community-content-cover {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(21, 129, 191, 0.08);
+}
+
+.community-content-cover-image,
+.community-content-fallback {
+  width: 100%;
+  height: 100%;
+  min-height: 170px;
+  object-fit: cover;
+}
+
+.community-content-fallback {
+  display: grid;
+  place-items: center;
+  color: var(--green-dark);
+}
+
+.community-content-copy {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+}
+
+.community-content-copy p {
+  color: var(--green-dark);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.community-content-copy h3 {
+  max-width: 920px;
+  font-size: clamp(24px, 2.4vw, 34px);
+  line-height: 1.08;
+}
+
+.community-content-copy > span,
+.community-content-copy em,
+.community-content-actions small {
+  color: var(--muted);
+}
+
+.community-content-copy em {
+  display: -webkit-box;
+  overflow: hidden;
+  font-style: normal;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.community-content-card-podcast .community-content-copy {
+  align-content: start;
+}
+
+.community-content-card-podcast audio {
+  width: 100%;
+  max-width: 860px;
+  margin-top: 4px;
+}
+
+.community-content-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
 .newsletter-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
@@ -5279,6 +5440,7 @@ th {
 
   .news-feature,
   .news-story,
+  .community-content-card,
   .article-feature,
   .article-mini-card,
   .podcast-feature,
@@ -5304,6 +5466,27 @@ th {
   .community-tabs button {
     flex: 0 0 auto;
     min-width: 156px;
+  }
+
+  .community-content-tools {
+    justify-content: flex-start;
+  }
+
+  .community-content-switch,
+  .community-content-filter {
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .community-content-switch::-webkit-scrollbar,
+  .community-content-filter::-webkit-scrollbar {
+    display: none;
+  }
+
+  .community-content-switch button,
+  .community-content-filter button {
+    flex: 0 0 auto;
   }
 
   .profile-cover-row,
@@ -5408,6 +5591,8 @@ th {
   .article-cover-fallback,
   .article-mini-card img,
   .article-mini-fallback,
+  .community-content-cover-image,
+  .community-content-fallback,
   .news-cover-fallback,
   .podcast-feature > img,
   .podcast-cover-fallback,
