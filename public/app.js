@@ -131,7 +131,7 @@ const views = [
   { id: "registro", label: "Registrar Audição", icon: Headphones },
   { id: "diario", label: "Diário", icon: Calendar },
   { id: "news", label: "Comunidade", icon: Newspaper },
-  { id: "bubbles", label: "Bubbles - FÃ³rum", icon: Users },
+  { id: "bubbles", label: "Bubbles - Fórum", icon: Users },
   { id: "perfil", label: "Perfil", icon: Users },
   { id: "dashboards", label: "Minhas Estatísticas", icon: BarChart3 },
   { id: "usuarios", label: "Usuários", icon: Users, adminOnly: true },
@@ -303,7 +303,7 @@ function PublicVisitorApp({ onLogin, theme, setTheme }) {
   const [authMode, setAuthMode] = useState("");
   const publicViews = [
     { id: "news", label: "Comunidade", icon: Newspaper },
-    { id: "bubbles", label: "Bubbles - FÃ³rum", icon: Users }
+    { id: "bubbles", label: "Bubbles - Fórum", icon: Users }
   ];
   const activeView = publicViews.find((item) => item.id === view) || publicViews[0];
 
@@ -330,7 +330,7 @@ function PublicVisitorApp({ onLogin, theme, setTheme }) {
         ),
         h("div", { className: "sidebar-footer" },
           h("div", { className: "display-mode-row" },
-            h("span", null, "Modo de ExibiÃ§Ã£o:"),
+            h("span", null, "Modo de Exibição:"),
             h(ThemeToggle, { theme, setTheme, compact: true })
           ),
           h("div", { className: "footer-divider" }),
