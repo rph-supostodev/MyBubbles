@@ -886,7 +886,7 @@ function NewsView({ reload, notify, user, openPublicProfile, onPodcastPlaybackCh
   const tabs = [
     ["news", "News", "Noticias do TMDQA", Newspaper],
     ["editorial", "Editorial", "Artigos da plataforma", BookOpen],
-    ["podcast", "Podcast", "Episodios dos admins", Headphones],
+    ["podcast", "Podcast", "Podcast da plataforma", Headphones],
     ["community-content", "Conteúdo Comunidade", "Textos e podcasts dos usuários", Library]
   ];
   if (user) tabs.push(["friends", "MyDearFriends", "Perfis da comunidade", Users]);
