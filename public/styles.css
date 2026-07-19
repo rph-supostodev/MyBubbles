@@ -3741,6 +3741,53 @@ table {
   border-color: rgba(255, 159, 67, 0.28);
 }
 
+.status-pill.pending {
+  color: #a36200;
+  background: rgba(255, 159, 67, 0.16);
+  border-color: rgba(255, 159, 67, 0.32);
+}
+
+.status-pill.approved {
+  color: #126f4f;
+  background: rgba(45, 213, 137, 0.14);
+  border-color: rgba(45, 213, 137, 0.32);
+}
+
+.status-pill.rejected {
+  color: #9f3e3e;
+  background: rgba(246, 111, 111, 0.14);
+  border-color: rgba(246, 111, 111, 0.32);
+}
+
+.public-access-note {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.public-access-note strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.public-signup-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.auth-modal {
+  max-width: 520px;
+}
+
+.signup-modal {
+  max-width: 760px;
+}
+
+.community-readonly {
+  margin-bottom: 14px;
+}
+
 .profile-public-screen {
   display: grid;
   gap: 20px;
@@ -4465,6 +4512,24 @@ table {
   color: var(--pink-dark);
   background: rgba(255, 159, 67, 0.13);
   border-color: rgba(255, 159, 67, 0.26);
+}
+
+[data-theme="dark"] .status-pill.pending {
+  color: #ffbd73;
+  background: rgba(255, 159, 67, 0.14);
+  border-color: rgba(255, 159, 67, 0.36);
+}
+
+[data-theme="dark"] .status-pill.approved {
+  color: #8af0c0;
+  background: rgba(31, 209, 124, 0.13);
+  border-color: rgba(31, 209, 124, 0.28);
+}
+
+[data-theme="dark"] .status-pill.rejected {
+  color: #ff9b9b;
+  background: rgba(246, 111, 111, 0.13);
+  border-color: rgba(246, 111, 111, 0.28);
 }
 
 th,

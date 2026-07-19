@@ -6,3 +6,4 @@ data/*.sqlite-*
 data/db.json
 data/news-cache.json
 *.tmp
+~$*

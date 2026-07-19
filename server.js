@@ -88,6 +88,14 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  const optionalAuth = getAuthenticatedUser(req);
+  req.user = optionalAuth?.user || null;
+
+  if (isPublicReadRoute(req, url)) {
+    await handlePublicReadApi(req, res, url);
+    return;
+  }
+
   const auth = requireAuth(req, res);
   if (!auth) return;
   req.user = auth.user;
@@ -250,6 +258,55 @@ async function handleApi(req, res, url) {
   sendJson(res, 404, { error: "Rota não encontrada." });
 }
 
+function isPublicReadRoute(req, url) {
+  if (req.method !== "GET") return false;
+  return url.pathname === "/api/news/releases"
+    || url.pathname === "/api/articles"
+    || url.pathname.startsWith("/api/articles/")
+    || url.pathname === "/api/podcasts"
+    || url.pathname.startsWith("/api/podcasts/")
+    || url.pathname === "/api/bubbles"
+    || url.pathname.startsWith("/api/bubbles/")
+    || url.pathname.startsWith("/api/profiles/");
+}
+
+async function handlePublicReadApi(req, res, url) {
+  if (req.method === "GET" && url.pathname === "/api/news/releases") {
+    const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 12), 1), 20);
+    const cursor = Math.max(Number(url.searchParams.get("cursor") || 0), 0);
+    sendJson(res, 200, readCommunityNews({ limit, cursor }));
+    return;
+  }
+
+  if (url.pathname === "/api/articles" || url.pathname.startsWith("/api/articles/")) {
+    await handleArticlesApi(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/api/podcasts" || url.pathname.startsWith("/api/podcasts/")) {
+    await handlePodcastsApi(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/api/bubbles" || url.pathname.startsWith("/api/bubbles/")) {
+    await handleBubblesApi(req, res, url);
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname.startsWith("/api/profiles/")) {
+    const userId = decodeURIComponent(url.pathname.split("/").pop() || "");
+    const profile = readPublicProfile(userId, req.user);
+    if (!profile) {
+      sendJson(res, 404, { error: "Perfil nao encontrado." });
+      return;
+    }
+    sendJson(res, 200, { profile });
+    return;
+  }
+
+  sendJson(res, 404, { error: "Rota nao encontrada." });
+}
+
 async function handleReviewCommentsApi(req, res, url) {
   const db = getDatabase();
   const parts = url.pathname.split("/").filter(Boolean);
@@ -319,6 +376,10 @@ async function handleArticlesApi(req, res, url) {
       return;
     }
     if (req.method === "POST" && parts.length === 4) {
+      if (!req.user) {
+        sendJson(res, 401, { error: "Entre para comentar." });
+        return;
+      }
       const payload = await readBody(req);
       createCommunityComment(db, "article", target.id, payload, req.user);
       sendJson(res, 200, { comments: listCommunityComments("article", target.id) });
@@ -398,6 +459,10 @@ async function handlePodcastsApi(req, res, url) {
       return;
     }
     if (req.method === "POST" && parts.length === 4) {
+      if (!req.user) {
+        sendJson(res, 401, { error: "Entre para comentar." });
+        return;
+      }
       const payload = await readBody(req);
       createCommunityComment(db, "podcast", target.id, payload, req.user);
       sendJson(res, 200, { comments: listCommunityComments("podcast", target.id) });
@@ -472,6 +537,10 @@ async function handleBubblesApi(req, res, url) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/bubbles") {
+    if (!req.user) {
+      sendJson(res, 401, { error: "Entre para criar uma Bubble." });
+      return;
+    }
     const payload = await readBody(req);
     const bubble = createBubble(db, req.user, payload);
     sendJson(res, 200, { bubble, bubbles: listVisibleBubbles(req.user) });
@@ -490,6 +559,11 @@ async function handleBubblesApi(req, res, url) {
       return;
     }
     sendJson(res, 200, { bubble: detail });
+    return;
+  }
+
+  if (!req.user) {
+    sendJson(res, 401, { error: "Entre para interagir com a Bubble." });
     return;
   }
 
@@ -731,9 +805,12 @@ async function handleUsersApi(req, res, url) {
 
   if (req.method === "GET" && url.pathname === "/api/users") {
     const users = db.prepare(`
-      SELECT id, name, email, role, status, created_at, updated_at, last_login_at
+      SELECT id, name, email, role, status, avatar_url, bio, phone, whatsapp, approval_status, created_at, updated_at, last_login_at
       FROM users
-      ORDER BY role, name
+      ORDER BY
+        CASE approval_status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+        role,
+        name
     `).all().map(publicUser);
     sendJson(res, 200, { users });
     return;
@@ -748,11 +825,13 @@ async function handleUsersApi(req, res, url) {
       INSERT INTO users (
         id, name, email, password_hash, role, status,
         avatar_url, bio, favorite_genres, favorite_artists,
+        phone, whatsapp, approval_status,
         created_at, updated_at, last_login_at
       )
       VALUES (
         :id, :name, :email, :password_hash, :role, :status,
         NULL, :bio, NULL, NULL,
+        :phone, :whatsapp, :approval_status,
         :created_at, :updated_at, NULL
       )
     `).run({
@@ -763,6 +842,9 @@ async function handleUsersApi(req, res, url) {
       role: user.role,
       status: user.status,
       bio: user.bio,
+      phone: user.phone,
+      whatsapp: user.whatsapp,
+      approval_status: user.approvalStatus,
       created_at: timestamp,
       updated_at: timestamp
     });
@@ -790,6 +872,9 @@ async function handleUsersApi(req, res, url) {
       role: user.role || existing.role,
       status: user.status || existing.status,
       bio: user.bio,
+      phone: user.phone,
+      whatsapp: user.whatsapp,
+      approval_status: user.approvalStatus,
       updated_at: timestamp
     };
 
@@ -797,14 +882,18 @@ async function handleUsersApi(req, res, url) {
       db.prepare(`
         UPDATE users
         SET name = :name, email = :email, password_hash = :password_hash,
-            role = :role, status = :status, bio = :bio, updated_at = :updated_at
+            role = :role, status = :status, bio = :bio,
+            phone = :phone, whatsapp = :whatsapp, approval_status = :approval_status,
+            updated_at = :updated_at
         WHERE id = :id
       `).run({ ...params, password_hash: hashPassword(user.password) });
     } else {
       db.prepare(`
         UPDATE users
         SET name = :name, email = :email, role = :role,
-            status = :status, bio = :bio, updated_at = :updated_at
+            status = :status, bio = :bio,
+            phone = :phone, whatsapp = :whatsapp, approval_status = :approval_status,
+            updated_at = :updated_at
         WHERE id = :id
       `).run(params);
     }
@@ -824,8 +913,13 @@ async function handleUsersApi(req, res, url) {
       sendJson(res, 400, { error: "Você não pode desativar o próprio usuário logado." });
       return;
     }
-    db.prepare("UPDATE users SET status = :status, updated_at = :updated_at WHERE id = :id")
-      .run({ id, status, updated_at: now() });
+    db.prepare(`
+      UPDATE users
+      SET status = :status,
+          approval_status = CASE WHEN :status = 'active' THEN 'approved' ELSE approval_status END,
+          updated_at = :updated_at
+      WHERE id = :id
+    `).run({ id, status, updated_at: now() });
     if (status === "inactive") {
       db.prepare("DELETE FROM sessions WHERE user_id = :id").run({ id });
     }
@@ -870,6 +964,39 @@ async function handleUsersApi(req, res, url) {
 }
 
 async function handleAuthApi(req, res, url) {
+  if (req.method === "POST" && url.pathname === "/api/auth/register") {
+    const payload = await readBody(req);
+    const user = normalizeSignupPayload(payload);
+    const db = getDatabase();
+    const timestamp = now();
+    assertEmailAvailable(db, user.email);
+    db.prepare(`
+      INSERT INTO users (
+        id, name, email, password_hash, role, status,
+        avatar_url, bio, favorite_genres, favorite_artists,
+        phone, whatsapp, approval_status,
+        created_at, updated_at, last_login_at
+      )
+      VALUES (
+        :id, :name, :email, :password_hash, 'user', 'inactive',
+        NULL, '', NULL, NULL,
+        :phone, :whatsapp, 'pending',
+        :created_at, :updated_at, NULL
+      )
+    `).run({
+      id: createId("user"),
+      name: user.name,
+      email: user.email,
+      password_hash: hashPassword(user.password),
+      phone: user.phone,
+      whatsapp: user.whatsapp,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+    sendJson(res, 200, { ok: true, message: "Cadastro enviado para aprovacao do administrador." });
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/auth/login") {
     const payload = await readBody(req);
     const email = clean(payload.email).toLowerCase();
@@ -882,7 +1009,7 @@ async function handleAuthApi(req, res, url) {
 
     const db = getDatabase();
     const user = db.prepare(`
-      SELECT id, name, email, password_hash, role, status, avatar_url, bio, last_login_at
+      SELECT id, name, email, password_hash, role, status, avatar_url, bio, phone, whatsapp, approval_status, last_login_at
       FROM users
       WHERE lower(email) = :email
     `).get({ email });
@@ -893,7 +1020,8 @@ async function handleAuthApi(req, res, url) {
     }
 
     if (user.status !== "active") {
-      sendJson(res, 403, { error: "Usuário inativo. Acesso bloqueado." });
+      const pending = user.approval_status === "pending";
+      sendJson(res, 403, { error: pending ? "Cadastro enviado e aguardando aprovacao do administrador." : "Usuario inativo. Acesso bloqueado." });
       return;
     }
 
@@ -984,6 +1112,9 @@ function getAuthenticatedUser(req) {
       users.status,
       users.avatar_url,
       users.bio,
+      users.phone,
+      users.whatsapp,
+      users.approval_status,
       users.last_login_at
     FROM sessions
     JOIN users ON users.id = sessions.user_id
@@ -1006,6 +1137,9 @@ function getAuthenticatedUser(req) {
       status: session.status,
       avatar_url: session.avatar_url,
       bio: session.bio,
+      phone: session.phone,
+      whatsapp: session.whatsapp,
+      approval_status: session.approval_status,
       last_login_at: session.last_login_at
     }
   };
@@ -1018,6 +1152,9 @@ function publicUser(user) {
     email: user.email,
     role: user.role,
     status: user.status,
+    approvalStatus: user.approval_status || user.approvalStatus || "approved",
+    phone: user.phone || "",
+    whatsapp: user.whatsapp || "",
     avatarUrl: user.avatar_url || user.avatarUrl || "",
     bio: user.bio || "",
     createdAt: user.created_at || user.createdAt || "",
@@ -1650,8 +1787,10 @@ function moderateReviewComment(db, reviewId, commentId, payload) {
     .run({ id: commentId, status, updated_at: now() });
 }
 
-function listVisibleBubbles(user) {
+function listVisibleBubbles(user = null) {
   const db = getDatabase();
+  const userId = user?.id || "";
+  const isAdmin = user?.role === "admin";
   const rows = db.prepare(`
     SELECT
       b.*,
@@ -1670,15 +1809,15 @@ function listVisibleBubbles(user) {
         OR bm.status = 'active'
       )
     ORDER BY b.created_at DESC
-  `).all({ user_id: user.id, is_admin: user.role === "admin" ? 1 : 0 });
+  `).all({ user_id: userId, is_admin: isAdmin ? 1 : 0 });
   return rows.map(bubbleToApi);
 }
 
-function getBubbleDetailForUser(bubbleId, user) {
+function getBubbleDetailForUser(bubbleId, user = null) {
   const db = getDatabase();
   const row = getBubbleRowForUser(db, bubbleId, user);
   if (!row) return null;
-  const canModerate = canManageBubble(bubbleId, user);
+  const canModerate = user ? canManageBubble(bubbleId, user) : false;
   return {
     ...bubbleToApi(row),
     canModerate,
@@ -1687,7 +1826,9 @@ function getBubbleDetailForUser(bubbleId, user) {
   };
 }
 
-function getBubbleRowForUser(db, bubbleId, user) {
+function getBubbleRowForUser(db, bubbleId, user = null) {
+  const userId = user?.id || "";
+  const isAdmin = user?.role === "admin";
   return db.prepare(`
     SELECT
       b.*,
@@ -1706,7 +1847,7 @@ function getBubbleRowForUser(db, bubbleId, user) {
         OR b.visibility IN ('public', 'restricted')
         OR bm.status = 'active'
       )
-  `).get({ id: bubbleId, user_id: user.id, is_admin: user.role === "admin" ? 1 : 0 });
+  `).get({ id: bubbleId, user_id: userId, is_admin: isAdmin ? 1 : 0 });
 }
 
 function createBubble(db, user, payload) {
@@ -1989,6 +2130,7 @@ function moderateBubbleComment(db, bubbleId, postId, commentId, payload, user) {
 }
 
 function canInteractInBubble(bubbleId, user) {
+  if (!user) return false;
   if (user.role === "admin") return true;
   const member = getDatabase().prepare(`
     SELECT status FROM bubble_members
@@ -1998,6 +2140,7 @@ function canInteractInBubble(bubbleId, user) {
 }
 
 function canManageBubble(bubbleId, user) {
+  if (!user) return false;
   if (user.role === "admin") return true;
   const member = getDatabase().prepare(`
     SELECT role, status FROM bubble_members
@@ -2184,9 +2327,12 @@ function clearSessionCookie(res) {
 
 function listUsers(db = getDatabase()) {
   return db.prepare(`
-    SELECT id, name, email, role, status, avatar_url, bio, created_at, updated_at, last_login_at
+    SELECT id, name, email, role, status, avatar_url, bio, phone, whatsapp, approval_status, created_at, updated_at, last_login_at
     FROM users
-    ORDER BY role, name
+    ORDER BY
+      CASE approval_status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+      role,
+      name
   `).all().map(publicUser);
 }
 
@@ -2197,13 +2343,35 @@ function normalizeUserPayload(payload, requirePassword) {
   const role = ["admin", "user"].includes(payload.role) ? payload.role : "user";
   const status = ["active", "inactive"].includes(payload.status) ? payload.status : "active";
   const bio = clean(payload.bio);
+  const phone = clean(payload.phone || payload.celular).slice(0, 40);
+  const whatsapp = clean(payload.whatsapp).slice(0, 40);
+  const payloadApproval = clean(payload.approvalStatus || payload.approval_status);
+  const approvalStatus = ["pending", "approved", "rejected"].includes(payloadApproval)
+    ? payloadApproval
+    : (status === "active" ? "approved" : "pending");
 
   if (!name) throw publicError("Informe o nome do usuário.");
   if (!email || !email.includes("@")) throw publicError("Informe um email válido.");
   if (requirePassword && password.length < 6) throw publicError("Informe uma senha com pelo menos 6 caracteres.");
   if (password && password.length < 6) throw publicError("A nova senha precisa ter pelo menos 6 caracteres.");
 
-  return { name, email, password, role, status, bio };
+  return { name, email, password, role, status, bio, phone, whatsapp, approvalStatus };
+}
+
+function normalizeSignupPayload(payload) {
+  const name = clean(payload.name).slice(0, 80);
+  const email = clean(payload.email).toLowerCase();
+  const password = String(payload.password || "");
+  const confirmPassword = String(payload.confirmPassword || "");
+  const phone = clean(payload.phone || payload.celular).slice(0, 40);
+  const whatsapp = clean(payload.whatsapp).slice(0, 40);
+
+  if (!name) throw publicError("Informe seu nome.");
+  if (!email || !email.includes("@")) throw publicError("Informe um email valido.");
+  if (password.length < 6) throw publicError("Informe uma senha com pelo menos 6 caracteres.");
+  if (confirmPassword && password !== confirmPassword) throw publicError("A confirmacao da senha nao confere.");
+
+  return { name, email, password, phone, whatsapp };
 }
 
 function normalizeProfilePayload(payload) {

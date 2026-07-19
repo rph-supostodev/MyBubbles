@@ -32,6 +32,9 @@ function applyMigrations(db) {
   ensureColumn(db, "users", "bio", "TEXT");
   ensureColumn(db, "users", "favorite_genres", "TEXT");
   ensureColumn(db, "users", "favorite_artists", "TEXT");
+  ensureColumn(db, "users", "phone", "TEXT");
+  ensureColumn(db, "users", "whatsapp", "TEXT");
+  ensureColumn(db, "users", "approval_status", "TEXT NOT NULL DEFAULT 'approved'");
   ensureColumn(db, "articles", "scope", "TEXT NOT NULL DEFAULT 'community'");
   ensureColumn(db, "podcast_episodes", "scope", "TEXT NOT NULL DEFAULT 'community'");
   ensureColumn(db, "bubbles", "cover_url", "TEXT");
@@ -97,6 +100,9 @@ CREATE TABLE IF NOT EXISTS users (
   bio TEXT,
   favorite_genres TEXT,
   favorite_artists TEXT,
+  phone TEXT,
+  whatsapp TEXT,
+  approval_status TEXT NOT NULL DEFAULT 'approved' CHECK (approval_status IN ('pending', 'approved', 'rejected')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   last_login_at TEXT

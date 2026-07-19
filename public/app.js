@@ -22,6 +22,7 @@ import {
   MessageCircle,
   Music2,
   Newspaper,
+  Phone,
   Plus,
   Reply,
   RefreshCw,
@@ -130,7 +131,7 @@ const views = [
   { id: "registro", label: "Registrar Audição", icon: Headphones },
   { id: "diario", label: "Diário", icon: Calendar },
   { id: "news", label: "Comunidade", icon: Newspaper },
-  { id: "bubbles", label: "Bubbles", icon: Users },
+  { id: "bubbles", label: "Bubbles - FÃ³rum", icon: Users },
   { id: "perfil", label: "Perfil", icon: Users },
   { id: "dashboards", label: "Minhas Estatísticas", icon: BarChart3 },
   { id: "usuarios", label: "Usuários", icon: Users, adminOnly: true },
@@ -204,7 +205,7 @@ function App() {
   }
 
   if (!user) {
-    return h(LoginView, { onLogin: handleLogin, theme, setTheme });
+    return h(PublicVisitorApp, { onLogin: handleLogin, theme, setTheme });
   }
 
   if (!db) {
@@ -296,6 +297,69 @@ function App() {
   );
 }
 
+function PublicVisitorApp({ onLogin, theme, setTheme }) {
+  const [view, setView] = useState("news");
+  const [toast, setToast] = useState("");
+  const [authMode, setAuthMode] = useState("");
+  const publicViews = [
+    { id: "news", label: "Comunidade", icon: Newspaper },
+    { id: "bubbles", label: "Bubbles - FÃ³rum", icon: Users }
+  ];
+  const activeView = publicViews.find((item) => item.id === view) || publicViews[0];
+
+  async function handleRegistered(message) {
+    setAuthMode("");
+    setToast(message || "Cadastro enviado para aprovacao do administrador.");
+  }
+
+  return h(React.Fragment, null,
+    h("div", { className: "shell public-shell" },
+      h("aside", { className: "sidebar" },
+        h("div", { className: "brand" },
+          h("div", { className: "brand-mark" },
+            h("img", { src: "/assets/myalbuns-logo-icon.png", alt: "MyAlbums", className: "brand-logo" })
+          ),
+          h("div", null, h("strong", null, "MyAlbums"), h("span", null, "For Music Lovers"))
+        ),
+        h("nav", { className: "nav-list", "aria-label": "Areas publicas" },
+          publicViews.map((item) => h("button", {
+            key: item.id,
+            className: `nav-item ${activeView.id === item.id ? "active" : ""}`,
+            onClick: () => setView(item.id)
+          }, h(item.icon, { size: 18 }), h("span", null, item.label), h(ChevronRight, { size: 16, className: "nav-arrow" })))
+        ),
+        h("div", { className: "sidebar-footer" },
+          h("div", { className: "display-mode-row" },
+            h("span", null, "Modo de ExibiÃ§Ã£o:"),
+            h(ThemeToggle, { theme, setTheme, compact: true })
+          ),
+          h("div", { className: "footer-divider" }),
+          h("div", { className: "public-access-note" },
+            h("strong", null, "Visitante"),
+            h("span", null, "Conteudos publicos liberados.")
+          ),
+          h("button", { className: "logout-btn", type: "button", onClick: () => setAuthMode("login") }, h(LogOut, { size: 15 }), "Entrar"),
+          h("button", { className: "ghost-btn public-signup-btn", type: "button", onClick: () => setAuthMode("signup") }, h(Users, { size: 15 }), "Criar conta")
+        )
+      ),
+      h("main", { className: "workspace" },
+        h("header", { className: "topbar" },
+          h("div", null, h("h1", null, activeView.label)),
+          h("div", { className: "top-actions" },
+            h("button", { className: "ghost-btn", type: "button", onClick: () => setAuthMode("login") }, "Entrar"),
+            h("button", { className: "primary-btn", type: "button", onClick: () => setAuthMode("signup") }, h(Plus, { size: 17 }), "Criar conta")
+          )
+        ),
+        toast ? h("div", { className: "toast" }, toast) : null,
+        activeView.id === "news" ? h(NewsView, { notify: setToast, user: null }) : null,
+        activeView.id === "bubbles" ? h(BubblesView, { user: null, notify: setToast, openPublicProfile: () => setAuthMode("signup"), initialBubbleId: "" }) : null
+      )
+    ),
+    authMode === "login" ? h(LoginModal, { onClose: () => setAuthMode(""), onLogin }) : null,
+    authMode === "signup" ? h(SignupModal, { onClose: () => setAuthMode(""), onRegistered: handleRegistered }) : null
+  );
+}
+
 function LoginView({ onLogin, theme, setTheme }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -353,6 +417,101 @@ function LoginView({ onLogin, theme, setTheme }) {
         h("button", { className: "primary-btn", disabled: loading },
           loading ? h(Loader2, { className: "spin", size: 17 }) : h(Check, { size: 17 }),
           loading ? "Entrando" : "Entrar"
+        )
+      )
+    )
+  );
+}
+
+function LoginModal({ onClose, onLogin }) {
+  useEscapeToClose(onClose);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setLoading(true);
+    setMessage("");
+    try {
+      await onLogin({ email, password });
+      onClose();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return h("div", { className: "modal-backdrop", role: "presentation", onMouseDown: onClose },
+    h("section", { className: "catalog-modal auth-modal", role: "dialog", "aria-modal": "true", "aria-label": "Entrar no MyAlbums", onMouseDown: (event) => event.stopPropagation() },
+      h("div", { className: "modal-head" },
+        h("div", null, h("p", null, "Acesso"), h("h2", null, "Entrar")),
+        h("button", { className: "ghost-btn small", type: "button", onClick: onClose }, "Fechar")
+      ),
+      h("form", { className: "login-form", onSubmit: submit, autoComplete: "off" },
+        h("label", null,
+          h("span", null, h(Mail, { size: 15 }), "Email"),
+          h("input", { type: "email", value: email, autoComplete: "off", onChange: (event) => setEmail(event.target.value), required: true })
+        ),
+        h("label", null,
+          h("span", null, h(Lock, { size: 15 }), "Senha"),
+          h("input", { type: "password", value: password, autoComplete: "new-password", onChange: (event) => setPassword(event.target.value), required: true })
+        ),
+        message ? h("div", { className: "login-message" }, message) : null,
+        h("button", { className: "primary-btn", disabled: loading },
+          loading ? h(Loader2, { className: "spin", size: 17 }) : h(Check, { size: 17 }),
+          loading ? "Entrando" : "Entrar"
+        )
+      )
+    )
+  );
+}
+
+function SignupModal({ onClose, onRegistered }) {
+  useEscapeToClose(onClose);
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "", phone: "", whatsapp: "" });
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function updateField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setLoading(true);
+    setMessage("");
+    try {
+      const data = await api("/api/auth/register", { method: "POST", body: form });
+      onRegistered(data.message);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return h("div", { className: "modal-backdrop", role: "presentation", onMouseDown: onClose },
+    h("section", { className: "catalog-modal auth-modal signup-modal", role: "dialog", "aria-modal": "true", "aria-label": "Criar conta no MyAlbums", onMouseDown: (event) => event.stopPropagation() },
+      h("div", { className: "modal-head" },
+        h("div", null, h("p", null, "Comunidade"), h("h2", null, "Criar conta")),
+        h("button", { className: "ghost-btn small", type: "button", onClick: onClose }, "Fechar")
+      ),
+      h("form", { className: "form-grid", onSubmit: submit, autoComplete: "off" },
+        h(AdminInput, { label: "Nome", value: form.name, onChange: (value) => updateField("name", value), required: true }),
+        h(AdminInput, { label: "Email", type: "email", value: form.email, onChange: (value) => updateField("email", value), required: true }),
+        h(AdminInput, { label: "Senha", type: "password", value: form.password, onChange: (value) => updateField("password", value), required: true }),
+        h(AdminInput, { label: "Confirmar senha", type: "password", value: form.confirmPassword, onChange: (value) => updateField("confirmPassword", value), required: true }),
+        h(AdminInput, { label: "Celular", value: form.phone, onChange: (value) => updateField("phone", value), icon: Phone }),
+        h(AdminInput, { label: "WhatsApp", value: form.whatsapp, onChange: (value) => updateField("whatsapp", value), icon: Phone }),
+        message ? h("div", { className: "login-message full" }, message) : null,
+        h("div", { className: "form-actions full" },
+          h("button", { className: "primary-btn", disabled: loading },
+            loading ? h(Loader2, { className: "spin", size: 16 }) : h(Check, { size: 16 }),
+            loading ? "Enviando" : "Enviar cadastro"
+          )
         )
       )
     )
@@ -683,7 +842,7 @@ function NewsView({ reload, notify, user, openPublicProfile, onPodcastPlaybackCh
     loadCommunityNews(0);
     loadArticles().catch((error) => notify(error.message));
     loadPodcasts().catch((error) => notify(error.message));
-    loadFriends().catch((error) => notify(error.message));
+    if (user) loadFriends().catch((error) => notify(error.message));
   }, []);
 
   useEffect(() => {
@@ -701,6 +860,12 @@ function NewsView({ reload, notify, user, openPublicProfile, onPodcastPlaybackCh
   const otherArticles = featuredArticle ? articles.filter((item) => item.id !== featuredArticle.id) : articles;
   const featuredPodcast = podcasts.find((item) => item.status === "published") || podcasts[0] || null;
   const otherPodcasts = featuredPodcast ? podcasts.filter((item) => item.id !== featuredPodcast.id) : podcasts;
+  const tabs = [
+    ["news", "News", "Noticias do TMDQA", Newspaper],
+    ["editorial", "Editorial", "Artigos da plataforma", BookOpen],
+    ["podcast", "Podcast", "Episodios dos admins", Headphones]
+  ];
+  if (user) tabs.push(["friends", "MyDearFriends", "Perfis da comunidade", Users]);
 
   function viewNews(item) {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -719,12 +884,7 @@ function NewsView({ reload, notify, user, openPublicProfile, onPodcastPlaybackCh
 
   return h("div", { className: "screen-grid" },
     h("nav", { className: "community-tabs", "aria-label": "Areas da Comunidade" },
-      [
-        ["news", "News", "Noticias do TMDQA", Newspaper],
-        ["editorial", "Editorial", "Artigos da plataforma", BookOpen],
-        ["podcast", "Podcast", "Episodios dos admins", Headphones],
-        ["friends", "MyDearFriends", "Perfis da comunidade", Users]
-      ].map(([id, label, description, Icon]) =>
+      tabs.map(([id, label, description, Icon]) =>
         h("button", {
           key: id,
           type: "button",
@@ -747,8 +907,8 @@ function NewsView({ reload, notify, user, openPublicProfile, onPodcastPlaybackCh
     communityTab === "podcast" ? h(CommunityPodcastArea, { featuredPodcast, otherPodcasts, isAdmin, viewPodcast, setEditingPodcast, deletePodcast, onPodcastPlaybackChange }) : null,
     communityTab === "friends" ? h(MyDearFriendsArea, { friends, openPublicProfile, reload: loadFriends, onToggleFavorite: toggleFriendFavorite }) : null,
     selectedNews ? h(CommunityNewsDetailModal, { item: selectedNews, onClose: () => setSelectedNews(null) }) : null,
-    selectedArticle ? h(ArticleDetailModal, { article: selectedArticle, onClose: () => setSelectedArticle(null), isAdmin, openPublicProfile, onEdit: (article) => { setSelectedArticle(null); setEditingArticle(article); } }) : null,
-    selectedPodcast ? h(PodcastDetailModal, { episode: selectedPodcast, onClose: () => setSelectedPodcast(null), isAdmin, openPublicProfile, onEdit: (episode) => { setSelectedPodcast(null); setEditingPodcast(episode); }, onPodcastPlaybackChange }) : null,
+    selectedArticle ? h(ArticleDetailModal, { article: selectedArticle, onClose: () => setSelectedArticle(null), isAdmin, openPublicProfile, canComment: Boolean(user), onEdit: (article) => { setSelectedArticle(null); setEditingArticle(article); } }) : null,
+    selectedPodcast ? h(PodcastDetailModal, { episode: selectedPodcast, onClose: () => setSelectedPodcast(null), isAdmin, openPublicProfile, canComment: Boolean(user), onEdit: (episode) => { setSelectedPodcast(null); setEditingPodcast(episode); }, onPodcastPlaybackChange }) : null,
     editingArticle ? h(ArticleEditorModal, { article: editingArticle, onClose: () => setEditingArticle(null), onSave: saveArticle }) : null,
     editingPodcast ? h(PodcastEditorModal, { episode: editingPodcast, onClose: () => setEditingPodcast(null), onSave: savePodcast }) : null
   );
@@ -1140,8 +1300,8 @@ function BubblesView({ user, notify, openPublicProfile, initialBubbleId }) {
   const canInteract = detail && (isAdmin || detail.myStatus === "active");
   const canManage = Boolean(detail?.canModerate || (detail && (isAdmin || (detail.myStatus === "active" && ["owner", "moderator"].includes(detail.myRole)))));
   const pendingRequests = canManage ? (detail?.members || []).filter((member) => member.status === "pending") : [];
-  const hasOwnBubble = bubbles.some((bubble) => bubble.createdBy === user.id && bubble.status !== "archived");
-  const canCreateBubble = !hasOwnBubble;
+  const hasOwnBubble = Boolean(user) && bubbles.some((bubble) => bubble.createdBy === user.id && bubble.status !== "archived");
+  const canCreateBubble = Boolean(user) && !hasOwnBubble;
 
   return h("div", { className: "bubbles-screen" },
     h("section", { className: "bubbles-rail panel" },
@@ -1152,7 +1312,7 @@ function BubblesView({ user, notify, openPublicProfile, initialBubbleId }) {
         ),
         canCreateBubble ? h("button", { className: "primary-btn small", type: "button", onClick: () => setCreateOpen(true) }, h(Plus, { size: 15 }), "Nova Bubble") : null
       ),
-      !canCreateBubble ? h("div", { className: "bubble-limit-note" }, "Voce ja possui uma Bubble como owner.") : null,
+      user && !canCreateBubble ? h("div", { className: "bubble-limit-note" }, "Voce ja possui uma Bubble como owner.") : null,
       bubbles.length
         ? h("div", { className: "bubble-card-list" },
             bubbles.map((bubble) => h(BubbleCard, {
@@ -1190,13 +1350,15 @@ function BubblesView({ user, notify, openPublicProfile, initialBubbleId }) {
                   )
                 )
               ),
-              !canInteract && detail.visibility !== "private"
+              user && !canInteract && detail.visibility !== "private"
                 ? h("button", { className: "bubble-join-btn", type: "button", onClick: joinBubble, disabled: detail.myStatus === "pending" },
                     h(Plus, { size: 15 }),
                     detail.myStatus === "pending" ? "Pedido enviado" : "Pedir entrada"
                   )
                 : null,
-              h("button", { className: "bubble-settings-btn", type: "button", onClick: () => setSettingsOpen(true), title: "Configurações da Bubble", "aria-label": "Configurações da Bubble" }, h(Settings, { size: 18 }))
+              canManage || (user && detail.createdBy === user.id)
+                ? h("button", { className: "bubble-settings-btn", type: "button", onClick: () => setSettingsOpen(true), title: "Configuracoes da Bubble", "aria-label": "Configuracoes da Bubble" }, h(Settings, { size: 18 }))
+                : null
             ),
               pendingRequests.length ? h(BubbleJoinRequestAlert, { requests: pendingRequests, onModerate: moderateMember, openPublicProfile }) : null,
               h("div", { className: "bubble-body-grid forum-only" },
@@ -1205,7 +1367,7 @@ function BubblesView({ user, notify, openPublicProfile, initialBubbleId }) {
                     h("input", { name: "title", placeholder: "Titulo da publicacao" }),
                     h("textarea", { name: "content", placeholder: "Compartilhe uma recomendacao, debate ou descoberta...", required: true }),
                     h("button", { className: "primary-btn", type: "submit" }, h(Check, { size: 15 }), "Publicar")
-                  ) : h("div", { className: "bubble-readonly" }, h(Lock, { size: 16 }), "Entre como membro ativo para publicar e comentar."),
+                  ) : h("div", { className: "bubble-readonly" }, h(Lock, { size: 16 }), user ? "Entre como membro ativo para publicar e comentar." : "Entre ou crie sua conta para participar do forum."),
                   (detail.posts || []).length
                     ? detail.posts.map((post) => h(BubblePost, { key: post.id, post, canInteract, canManage, onComment: createComment, onModeratePost: moderatePost, onModerateComment: moderateComment, openPublicProfile }))
                     : h(EmptyState, { text: "O feed desta Bubble ainda esta vazio." })
@@ -1471,7 +1633,7 @@ function BubbleComment({ post, comment, canInteract, canManage, onComment, onMod
   );
 }
 
-function CommunityComments({ targetLabel, endpoint, isAdmin, openPublicProfile }) {
+function CommunityComments({ targetLabel, endpoint, isAdmin, openPublicProfile, canComment = true }) {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -1489,6 +1651,7 @@ function CommunityComments({ targetLabel, endpoint, isAdmin, openPublicProfile }
 
   async function submitComment(event, parentCommentId = "") {
     event.preventDefault();
+    if (!canComment) return;
     const form = event.currentTarget;
     const payload = formData(form);
     if (parentCommentId) payload.parentCommentId = parentCommentId;
@@ -1519,10 +1682,12 @@ function CommunityComments({ targetLabel, endpoint, isAdmin, openPublicProfile }
       ),
       h(MessageCircle, { size: 20 })
     ),
-    h("form", { className: "bubble-comment-form community-comment-form", onSubmit: submitComment },
-      h("input", { name: "content", maxLength: 800, placeholder: `Comente este ${targetLabel}...`, required: true }),
-      h("button", { type: "submit", disabled: sending }, sending ? "Enviando" : "Comentar")
-    ),
+    canComment
+      ? h("form", { className: "bubble-comment-form community-comment-form", onSubmit: submitComment },
+          h("input", { name: "content", maxLength: 800, placeholder: `Comente este ${targetLabel}...`, required: true }),
+          h("button", { type: "submit", disabled: sending }, sending ? "Enviando" : "Comentar")
+        )
+      : h("div", { className: "bubble-readonly community-readonly" }, h(Lock, { size: 16 }), "Entre ou crie sua conta para comentar."),
     loading
       ? h("p", { className: "bubble-no-comments" }, "Carregando comentarios...")
       : comments.length
@@ -1531,6 +1696,7 @@ function CommunityComments({ targetLabel, endpoint, isAdmin, openPublicProfile }
               key: comment.id,
               comment,
               isAdmin,
+              canComment,
               onReply: submitComment,
               onModerate: moderateComment,
               openPublicProfile
@@ -1540,7 +1706,7 @@ function CommunityComments({ targetLabel, endpoint, isAdmin, openPublicProfile }
   );
 }
 
-function CommunityComment({ comment, isAdmin, onReply, onModerate, openPublicProfile }) {
+function CommunityComment({ comment, isAdmin, canComment = true, onReply, onModerate, openPublicProfile }) {
   const [replying, setReplying] = useState(false);
   return h("div", { className: `bubble-comment community-comment ${comment.status !== "active" ? "moderated" : ""}` },
     h("div", { className: "bubble-comment-line" },
@@ -1553,14 +1719,14 @@ function CommunityComment({ comment, isAdmin, onReply, onModerate, openPublicPro
         ),
         h("p", null, comment.content),
         h("div", { className: "bubble-comment-actions" },
-          h("button", { type: "button", onClick: () => setReplying((value) => !value) }, h(Reply, { size: 13 }), "Responder"),
+          canComment ? h("button", { type: "button", onClick: () => setReplying((value) => !value) }, h(Reply, { size: 13 }), "Responder") : null,
           isAdmin ? h("div", { className: "bubble-mod-actions" },
             comment.status !== "hidden" ? h("button", { type: "button", onClick: () => onModerate(comment, "hidden") }, "Ocultar") : null,
             comment.status !== "removed" ? h("button", { type: "button", onClick: () => onModerate(comment, "removed") }, "Remover") : null,
             comment.status !== "active" ? h("button", { type: "button", onClick: () => onModerate(comment, "active") }, "Restaurar") : null
           ) : null
         ),
-        replying ? h("form", { className: "bubble-comment-form nested", onSubmit: async (event) => { await onReply(event, comment.id); setReplying(false); } },
+        replying && canComment ? h("form", { className: "bubble-comment-form nested", onSubmit: async (event) => { await onReply(event, comment.id); setReplying(false); } },
           h("input", { name: "content", maxLength: 800, placeholder: `Responder ${comment.authorName || "comentario"}...`, required: true }),
           h("button", { type: "submit" }, "Responder")
         ) : null,
@@ -1569,6 +1735,7 @@ function CommunityComment({ comment, isAdmin, onReply, onModerate, openPublicPro
             key: reply.id,
               comment: reply,
               isAdmin,
+              canComment,
               onReply,
               onModerate,
               openPublicProfile
@@ -1859,7 +2026,7 @@ function ReleaseDetailModal({ album, onClose, onImport }) {
   );
 }
 
-function ArticleDetailModal({ article, onClose, isAdmin, openPublicProfile, onEdit }) {
+function ArticleDetailModal({ article, onClose, isAdmin, openPublicProfile, onEdit, canComment = true }) {
   useEscapeToClose(onClose);
   return h("div", { className: "modal-backdrop", role: "presentation", onMouseDown: onClose },
     h("section", { className: "catalog-modal article-detail-modal", role: "dialog", "aria-modal": "true", "aria-label": "Leitura do artigo", onMouseDown: (event) => event.stopPropagation() },
@@ -1877,7 +2044,7 @@ function ArticleDetailModal({ article, onClose, isAdmin, openPublicProfile, onEd
       ),
       article.summary ? h("p", { className: "article-summary" }, article.summary) : null,
       h("div", { className: "article-body" }, renderArticleContent(article.content)),
-      h(CommunityComments, { targetLabel: "artigo", endpoint: `/api/articles/${encodeURIComponent(article.id)}/comments`, isAdmin, openPublicProfile })
+      h(CommunityComments, { targetLabel: "artigo", endpoint: `/api/articles/${encodeURIComponent(article.id)}/comments`, isAdmin, openPublicProfile, canComment })
     )
   );
 }
@@ -1949,7 +2116,7 @@ function ArticleEditorModal({ article, onClose, onSave, contextLabel = "Newslett
   );
 }
 
-function PodcastDetailModal({ episode, onClose, isAdmin, openPublicProfile, onEdit, onPodcastPlaybackChange }) {
+function PodcastDetailModal({ episode, onClose, isAdmin, openPublicProfile, onEdit, onPodcastPlaybackChange, canComment = true }) {
   useEscapeToClose(onClose);
   const paragraphs = articleParagraphs(episode.description || episode.summary);
   return h("div", { className: "modal-backdrop", role: "presentation", onMouseDown: onClose },
@@ -1970,7 +2137,7 @@ function PodcastDetailModal({ episode, onClose, isAdmin, openPublicProfile, onEd
       episode.playbackAudioUrl ? h("div", { className: "podcast-player" }, h(PodcastInlinePlayer, { episode, onPodcastPlaybackChange })) : null,
       h("div", { className: "article-body" }, paragraphs.length ? paragraphs.map((paragraph, index) => h("p", { key: index }, paragraph)) : h("p", null, "Sem descricao informada.")),
       episode.externalUrl ? h("a", { className: "primary-link podcast-external-link", href: episode.externalUrl, target: "_blank", rel: "noreferrer" }, "Abrir episodio completo") : null,
-      h(CommunityComments, { targetLabel: "episodio", endpoint: `/api/podcasts/${encodeURIComponent(episode.id)}/comments`, isAdmin, openPublicProfile })
+      h(CommunityComments, { targetLabel: "episodio", endpoint: `/api/podcasts/${encodeURIComponent(episode.id)}/comments`, isAdmin, openPublicProfile, canComment })
     )
   );
 }
@@ -2680,7 +2847,7 @@ function SummaryTable({ title, rows, topAlbums: isTopAlbums }) {
 }
 
 function AdminUsersView({ notify, currentUser }) {
-  const emptyForm = { name: "", email: "", password: "", role: "user", status: "active", bio: "" };
+  const emptyForm = { name: "", email: "", password: "", role: "user", status: "active", approvalStatus: "approved", phone: "", whatsapp: "", bio: "" };
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState("");
@@ -2714,6 +2881,9 @@ function AdminUsersView({ notify, currentUser }) {
       password: "",
       role: user.role || "user",
       status: user.status || "active",
+      approvalStatus: user.approvalStatus || "approved",
+      phone: user.phone || "",
+      whatsapp: user.whatsapp || "",
       bio: user.bio || ""
     });
   }
@@ -2772,6 +2942,9 @@ function AdminUsersView({ notify, currentUser }) {
         h(AdminInput, { label: editingId ? "Nova senha" : "Senha", type: "password", value: form.password, onChange: (value) => updateField("password", value), required: !editingId }),
         h(AdminSelect, { label: "Perfil", value: form.role, onChange: (value) => updateField("role", value), options: [["user", "Usuário"], ["admin", "Administrador"]] }),
         h(AdminSelect, { label: "Status", value: form.status, onChange: (value) => updateField("status", value), options: [["active", "Ativo"], ["inactive", "Inativo"]] }),
+        h(AdminSelect, { label: "Aprovacao", value: form.approvalStatus, onChange: (value) => updateField("approvalStatus", value), options: [["approved", "Aprovado"], ["pending", "Pendente"], ["rejected", "Recusado"]] }),
+        h(AdminInput, { label: "Celular", value: form.phone, onChange: (value) => updateField("phone", value), icon: Phone }),
+        h(AdminInput, { label: "WhatsApp", value: form.whatsapp, onChange: (value) => updateField("whatsapp", value), icon: Phone }),
         h("label", { className: "field full" },
           h("span", null, "Bio"),
           h("textarea", { value: form.bio, onChange: (event) => updateField("bio", event.target.value), rows: 3 })
@@ -2791,17 +2964,22 @@ function AdminUsersView({ notify, currentUser }) {
         : h("div", { className: "table-wrap" },
           h("table", { className: "admin-users-table" },
             h("thead", null, h("tr", null,
-              ["Nome", "Email", "Perfil", "Status", "Último login", "Ações"].map((cell) => h("th", { key: cell }, cell))
+              ["Nome", "Email", "Perfil", "Aprovacao", "Status", "Contato", "Ultimo login", "Acoes"].map((cell) => h("th", { key: cell }, cell))
             )),
             h("tbody", null, users.map((user) => h("tr", { key: user.id },
               h("td", null, h("strong", null, user.name)),
               h("td", null, user.email),
               h("td", null, user.role === "admin" ? "Administrador" : "Usuário"),
+              h("td", null, h("span", { className: `status-pill ${user.approvalStatus || "approved"}` }, approvalStatusLabel(user.approvalStatus))),
               h("td", null, h("span", { className: `status-pill ${user.status}` }, user.status === "active" ? "Ativo" : "Inativo")),
+              h("td", null, user.phone || user.whatsapp ? [user.phone, user.whatsapp].filter(Boolean).join(" / ") : "—"),
               h("td", null, user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "—"),
               h("td", null,
                 h("div", { className: "row-actions" },
                   h("button", { className: "ghost-btn", onClick: () => editUser(user) }, "Editar"),
+                  user.approvalStatus === "pending"
+                    ? h("button", { className: "primary-btn small", onClick: () => changeStatus(user, "active") }, "Aceitar")
+                    : null,
                   user.status === "active"
                     ? h("button", { className: "danger-btn", disabled: user.id === currentUser.id, onClick: () => changeStatus(user, "inactive") }, "Desativar")
                     : h("button", { className: "ghost-btn", onClick: () => changeStatus(user, "active") }, "Ativar"),
@@ -2815,9 +2993,9 @@ function AdminUsersView({ notify, currentUser }) {
   );
 }
 
-function AdminInput({ label, value, onChange, type = "text", required = false }) {
+function AdminInput({ label, value, onChange, type = "text", required = false, icon: Icon }) {
   return h("label", { className: "field" },
-    h("span", null, label),
+    h("span", null, Icon ? h(Icon, { size: 14 }) : null, label),
     h("input", { type, value, required, onChange: (event) => onChange(event.target.value) })
   );
 }
@@ -3677,6 +3855,12 @@ function formatDate(value) {
   const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!match) return value || "";
   return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function approvalStatusLabel(value) {
+  if (value === "pending") return "Pendente";
+  if (value === "rejected") return "Recusado";
+  return "Aprovado";
 }
 
 function formatDateTime(value) {
