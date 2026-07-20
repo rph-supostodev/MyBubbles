@@ -1237,6 +1237,19 @@ h3 {
   color: var(--muted);
 }
 
+.community-content-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.community-content-meta .user-profile-name-link,
+.community-content-meta strong {
+  color: inherit;
+  font-size: inherit;
+}
+
 .community-content-copy em {
   display: -webkit-box;
   overflow: hidden;

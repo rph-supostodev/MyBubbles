@@ -938,6 +938,7 @@ function NewsView({ reload, notify, user, openPublicProfile, onPodcastPlaybackCh
       user,
       viewArticle,
       viewPodcast,
+      openPublicProfile,
       onPodcastPlaybackChange
     }) : null,
     communityTab === "friends" ? h(MyDearFriendsArea, { friends, openPublicProfile, reload: loadFriends, onToggleFavorite: toggleFriendFavorite }) : null,
@@ -1083,7 +1084,7 @@ function CommunityPodcastArea({ featuredPodcast, otherPodcasts, isAdmin, viewPod
   );
 }
 
-function CommunityContentArea({ content, contentType, setContentType, scope, setScope, user, viewArticle, viewPodcast, onPodcastPlaybackChange }) {
+function CommunityContentArea({ content, contentType, setContentType, scope, setScope, user, viewArticle, viewPodcast, openPublicProfile, onPodcastPlaybackChange }) {
   const articles = content.articles || [];
   const podcasts = content.podcasts || [];
   const isArticleTab = contentType === "articles";
@@ -1128,8 +1129,8 @@ function CommunityContentArea({ content, contentType, setContentType, scope, set
     currentItems.length
       ? h("div", { className: "community-content-list" },
           currentItems.map((item) => isArticleTab
-            ? h(CommunityContentArticleCard, { key: item.id, article: item, onView: viewArticle })
-            : h(CommunityContentPodcastCard, { key: item.id, episode: item, onView: viewPodcast, onPodcastPlaybackChange })
+            ? h(CommunityContentArticleCard, { key: item.id, article: item, onView: viewArticle, openPublicProfile })
+            : h(CommunityContentPodcastCard, { key: item.id, episode: item, onView: viewPodcast, openPublicProfile, onPodcastPlaybackChange })
           )
         )
       : h(EmptyState, {
@@ -1142,7 +1143,7 @@ function CommunityContentArea({ content, contentType, setContentType, scope, set
   );
 }
 
-function CommunityContentArticleCard({ article, onView }) {
+function CommunityContentArticleCard({ article, onView, openPublicProfile }) {
   return h("article", { className: "community-content-card" },
     h("button", { className: "community-content-cover", type: "button", onClick: () => onView(article), title: "Ler artigo" },
       h(SafeImage, { src: article.coverUrl, className: "community-content-cover-image", fallbackClassName: "community-content-fallback", fallbackIcon: h(BookOpen, { size: 28 }) })
@@ -1150,7 +1151,10 @@ function CommunityContentArticleCard({ article, onView }) {
     h("div", { className: "community-content-copy" },
       h("p", null, "Artigo da comunidade"),
       h("h3", null, article.title),
-      h("span", null, `${article.authorName || "Usuário"} · ${formatDate(article.publishedAt || article.updatedAt)}`),
+      h("span", { className: "community-content-meta" },
+        h(UserProfileName, { user: { userId: article.authorId, authorName: article.authorName || "Usuário" }, onOpenProfile: openPublicProfile }),
+        h("span", null, `· ${formatDate(article.publishedAt || article.updatedAt)}`)
+      ),
       h("em", null, article.summary || "Texto publicado no perfil deste usuário."),
       h("div", { className: "community-content-actions" },
         h("button", { className: "ghost-btn", type: "button", onClick: () => onView(article) }, h(Eye, { size: 15 }), "Ler artigo"),
@@ -1160,7 +1164,7 @@ function CommunityContentArticleCard({ article, onView }) {
   );
 }
 
-function CommunityContentPodcastCard({ episode, onView, onPodcastPlaybackChange }) {
+function CommunityContentPodcastCard({ episode, onView, openPublicProfile, onPodcastPlaybackChange }) {
   return h("article", { className: "community-content-card community-content-card-podcast" },
     h("button", { className: "community-content-cover", type: "button", onClick: () => onView(episode), title: "Ver podcast" },
       h(SafeImage, { src: episode.coverUrl, className: "community-content-cover-image", fallbackClassName: "community-content-fallback", fallbackIcon: h(Headphones, { size: 28 }) })
@@ -1168,7 +1172,10 @@ function CommunityContentPodcastCard({ episode, onView, onPodcastPlaybackChange 
     h("div", { className: "community-content-copy" },
       h("p", null, "Podcast da comunidade"),
       h("h3", null, episode.title),
-      h("span", null, `${episode.authorName || "Usuário"} · ${formatDate(episode.publishedAt || episode.updatedAt)}${episode.durationMin ? ` · ${episode.durationMin} min` : ""}`),
+      h("span", { className: "community-content-meta" },
+        h(UserProfileName, { user: { userId: episode.authorId, authorName: episode.authorName || "Usuário" }, onOpenProfile: openPublicProfile }),
+        h("span", null, `· ${formatDate(episode.publishedAt || episode.updatedAt)}${episode.durationMin ? ` · ${episode.durationMin} min` : ""}`)
+      ),
       h("em", null, episode.summary || episode.description || "Episódio publicado no perfil deste usuário."),
       episode.playbackAudioUrl ? h(PodcastInlinePlayer, { episode, onPodcastPlaybackChange }) : null,
       h("div", { className: "community-content-actions" },
