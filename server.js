@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { Readable } = require("stream");
+const { pipeline } = require("stream/promises");
 const { getDatabase, initDatabase, createId, now } = require("./src/database");
 const { hashPassword, verifyPassword } = require("./src/passwords");
 
@@ -19,6 +20,8 @@ const SESSION_DAYS = 7;
 const NEWS_REFRESH_COOLDOWN_MS = 90 * 1000;
 const TMDQA_RSS_URL = "https://www.tenhomaisdiscosqueamigos.com/feed/";
 const TMDQA_SOURCE_NAME = "Tenho Mais Discos Que Amigos!";
+const EXTERNAL_FETCH_TIMEOUT_MS = 20000;
+const PODCAST_FETCH_TIMEOUT_MS = 45000;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -74,15 +77,44 @@ const server = http.createServer(async (req, res) => {
     await serveStatic(res, url.pathname);
   } catch (error) {
     console.error(error);
+    if (res.headersSent) {
+      res.destroy(error);
+      return;
+    }
     sendJson(res, error.statusCode || 500, { error: error.publicMessage || "Erro interno no servidor." });
   }
 });
 
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(`Porta ${PORT} ja esta em uso. Feche o outro terminal do MyAlbums ou encerre o processo Node antigo antes de rodar novamente.`);
+    process.exit(1);
+  }
+  console.error("Falha ao iniciar o servidor:", error);
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
-  console.log(`Sistema Álbuns Música rodando em http://localhost:${PORT}`);
+  confirmServerReady();
+});
+
+module.exports = server;
+
+process.on("unhandledRejection", (error) => {
+  console.error("Erro assincrono nao tratado:", error);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Erro inesperado no servidor:", error);
+  if (!isRecoverableExternalError(error)) process.exit(1);
 });
 
 async function handleApi(req, res, url) {
+  if (req.method === "GET" && url.pathname === "/api/health") {
+    sendJson(res, 200, { ok: true, status: "ready", port: PORT });
+    return;
+  }
+
   if (url.pathname.startsWith("/api/auth/")) {
     await handleAuthApi(req, res, url);
     return;
@@ -1493,34 +1525,45 @@ async function streamPodcastAudio(req, res, id, user) {
 
   let lastStatus = 0;
   for (const candidate of candidates) {
-    let upstream = await fetch(candidate, { headers, redirect: "follow" });
-    lastStatus = upstream.status;
-    let contentType = upstream.headers.get("content-type") || "";
+    let upstream = null;
+    try {
+      upstream = await fetchWithTimeout(candidate, { headers, redirect: "follow" }, PODCAST_FETCH_TIMEOUT_MS);
+      lastStatus = upstream.status;
+      let contentType = upstream.headers.get("content-type") || "";
 
-    if (upstream.ok && contentType.includes("text/html")) {
-      const html = await upstream.text();
-      const confirmedUrl = googleDriveConfirmedDownloadUrl(html);
-      if (confirmedUrl) {
-        upstream = await fetch(confirmedUrl, { headers, redirect: "follow" });
-        lastStatus = upstream.status;
-        contentType = upstream.headers.get("content-type") || "";
+      if (upstream.ok && contentType.includes("text/html")) {
+        const html = await upstream.text();
+        const confirmedUrl = googleDriveConfirmedDownloadUrl(html);
+        if (confirmedUrl) {
+          upstream = await fetchWithTimeout(confirmedUrl, { headers, redirect: "follow" }, PODCAST_FETCH_TIMEOUT_MS);
+          lastStatus = upstream.status;
+          contentType = upstream.headers.get("content-type") || "";
+        }
       }
-    }
 
-    if (!upstream.ok || contentType.includes("text/html")) {
-      await upstream.body?.cancel?.();
+      if (!upstream.ok || contentType.includes("text/html")) {
+        await upstream.body?.cancel?.();
+        continue;
+      }
+
+      res.writeHead(upstream.status === 206 ? 206 : 200, {
+        "Content-Type": contentType || "audio/mpeg",
+        "Accept-Ranges": upstream.headers.get("accept-ranges") || "bytes",
+        ...(upstream.headers.get("content-length") ? { "Content-Length": upstream.headers.get("content-length") } : {}),
+        ...(upstream.headers.get("content-range") ? { "Content-Range": upstream.headers.get("content-range") } : {}),
+        "Cache-Control": "private, max-age=300"
+      });
+      await pipeline(Readable.fromWeb(upstream.body), res);
+      return;
+    } catch (error) {
+      await upstream?.body?.cancel?.().catch?.(() => {});
+      if (res.headersSent) {
+        console.warn("Stream de podcast interrompido:", error.message);
+        return;
+      }
+      console.warn("Falha ao carregar candidato de audio:", error.message);
       continue;
     }
-
-    res.writeHead(upstream.status === 206 ? 206 : 200, {
-      "Content-Type": contentType || "audio/mpeg",
-      "Accept-Ranges": upstream.headers.get("accept-ranges") || "bytes",
-      ...(upstream.headers.get("content-length") ? { "Content-Length": upstream.headers.get("content-length") } : {}),
-      ...(upstream.headers.get("content-range") ? { "Content-Range": upstream.headers.get("content-range") } : {}),
-      "Cache-Control": "private, max-age=300"
-    });
-    Readable.fromWeb(upstream.body).pipe(res);
-    return;
   }
 
   sendJson(res, 502, {
@@ -2770,13 +2813,13 @@ function saveCatalogAlbum(userId, payload) {
     INSERT INTO catalog_albums (
       id, user_id, spotify_id, album, artist, release_date, release_year,
       decade, genre, subgenre, country, label, tracks, duration_min,
-      has_physical, physical_format, collection_status, cover_url,
+      has_physical, physical_format, collection_status, collection_registered_at, cover_url,
       spotify_url, observations, is_active, created_at, updated_at
     )
     VALUES (
       :id, :user_id, :spotify_id, :album, :artist, :release_date, :release_year,
       :decade, :genre, :subgenre, :country, :label, :tracks, :duration_min,
-      :has_physical, :physical_format, :collection_status, :cover_url,
+      :has_physical, :physical_format, :collection_status, :collection_registered_at, :cover_url,
       :spotify_url, :observations, 1, :created_at, :updated_at
     )
     ON CONFLICT(id) DO UPDATE SET
@@ -2795,6 +2838,7 @@ function saveCatalogAlbum(userId, payload) {
       has_physical = excluded.has_physical,
       physical_format = excluded.physical_format,
       collection_status = excluded.collection_status,
+      collection_registered_at = excluded.collection_registered_at,
       cover_url = excluded.cover_url,
       spotify_url = excluded.spotify_url,
       observations = excluded.observations,
@@ -2818,6 +2862,7 @@ function saveCatalogAlbum(userId, payload) {
     has_physical: entry.hasPhysical || "Não",
     physical_format: entry.physicalFormat || "",
     collection_status: entry.collectionStatus || "",
+    collection_registered_at: entry.collectionRegisteredAt || timestamp.slice(0, 10),
     cover_url: entry.coverUrl || "",
     spotify_url: entry.spotifyUrl || "",
     observations: entry.observations || "",
@@ -2946,6 +2991,7 @@ function sqliteCatalogToLegacy(row) {
     hasPhysical: row.has_physical || "Não",
     physicalFormat: row.physical_format || "",
     collectionStatus: row.collection_status || "",
+    collectionRegisteredAt: row.collection_registered_at || "",
     coverUrl: row.cover_url || "",
     spotifyUrl: row.spotify_url || "",
     observations: row.observations || ""
@@ -2999,6 +3045,8 @@ function normalizeCatalogEntry(payload) {
   const releaseYear = Number(payload.releaseYear || yearFromDate(payload.releaseDate) || 0);
   const tracks = Number(payload.tracks || 0);
   const durationMin = Number(payload.durationMin || 0);
+  const physicalFormat = clean(payload.physicalFormat);
+  const collectionStatus = clean(payload.collectionStatus) || "Na coleção";
   return {
     id: payload.id || payload.spotifyId || randomId("album"),
     spotifyId: payload.spotifyId || "",
@@ -3013,9 +3061,10 @@ function normalizeCatalogEntry(payload) {
     label: clean(payload.label),
     tracks,
     durationMin,
-    hasPhysical: payload.hasPhysical || "Não",
-    physicalFormat: clean(payload.physicalFormat),
-    collectionStatus: clean(payload.collectionStatus),
+    hasPhysical: payload.hasPhysical || (physicalFormat && physicalFormat !== "Digital" ? "Sim" : "Não"),
+    physicalFormat,
+    collectionStatus,
+    collectionRegisteredAt: payload.collectionRegisteredAt || new Date().toISOString().slice(0, 10),
     coverUrl: payload.coverUrl || "",
     spotifyUrl: payload.spotifyUrl || "",
     observations: clean(payload.observations)
@@ -3080,7 +3129,7 @@ async function spotifySearch(query, limit = 10, market = "") {
   searchUrl.searchParams.set("q", query);
   if (market) searchUrl.searchParams.set("market", market);
 
-  const response = await fetch(searchUrl, {
+  const response = await fetchWithTimeout(searchUrl, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) {
@@ -3261,7 +3310,7 @@ function sqliteNewsToCatalog(row) {
     tracks: row.total_tracks || payload.tracks || 0,
     coverUrl: row.cover_url || payload.coverUrl || "",
     spotifyUrl: row.external_url || payload.spotifyUrl || "",
-    observations: payload.observations || "Importado do Spotify"
+    observations: payload.observations || ""
   });
 }
 
@@ -3359,7 +3408,7 @@ function saveCommunityNews(results) {
 }
 
 async function fetchTmdqaNews() {
-  const response = await fetch(TMDQA_RSS_URL, {
+  const response = await fetchWithTimeout(TMDQA_RSS_URL, {
     headers: {
       "User-Agent": "MyAlbums/1.0 (+local-community-cache)",
       Accept: "application/rss+xml, application/xml, text/xml"
@@ -3571,7 +3620,7 @@ async function spotifySearchLatestByArtist(artistName, token, limit) {
   searchUrl.searchParams.set("market", "BR");
   searchUrl.searchParams.set("q", `artist:${spotifyQueryValue(artistName)}`);
 
-  const response = await fetch(searchUrl, {
+  const response = await fetchWithTimeout(searchUrl, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (response.status === 429) throw spotifyRateLimitError(response);
@@ -3592,7 +3641,7 @@ async function spotifyArtistAlbumReleases(artist, token, limit) {
   releasesUrl.searchParams.set("market", "BR");
   releasesUrl.searchParams.set("limit", "10");
 
-  const response = await fetch(releasesUrl, {
+  const response = await fetchWithTimeout(releasesUrl, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (response.status === 429) throw spotifyRateLimitError(response);
@@ -3667,7 +3716,7 @@ function seededNewsReleases(limit) {
     collectionStatus: "",
     coverUrl,
     spotifyUrl: `https://open.spotify.com/album/${spotifyId}`,
-    observations: "Importado do Spotify"
+    observations: ""
   })).slice(0, limit);
 }
 
@@ -3678,7 +3727,7 @@ async function spotifyFindArtist(artistName, token) {
   searchUrl.searchParams.set("q", `artist:${spotifyQueryValue(artistName)}`);
   searchUrl.searchParams.set("market", "BR");
 
-  const response = await fetch(searchUrl, {
+  const response = await fetchWithTimeout(searchUrl, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (response.status === 429) throw spotifyRateLimitError(response);
@@ -3718,7 +3767,7 @@ async function spotifyBrowseNewReleases(token, limit) {
   releasesUrl.searchParams.set("country", "BR");
   releasesUrl.searchParams.set("limit", String(Math.min(limit || 12, 20)));
 
-  const response = await fetch(releasesUrl, {
+  const response = await fetchWithTimeout(releasesUrl, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) return [];
@@ -3768,7 +3817,7 @@ function spotifyQueryValue(value) {
 }
 
 async function spotifyAlbum(id, token) {
-  const response = await fetch(`https://api.spotify.com/v1/albums/${id}`, {
+  const response = await fetchWithTimeout(`https://api.spotify.com/v1/albums/${id}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!response.ok) return null;
@@ -3780,7 +3829,7 @@ async function spotifyArtistGenres(album, token) {
   if (!artistIds.length) return [];
 
   const results = await Promise.all(artistIds.map(async (id) => {
-    const response = await fetch(`https://api.spotify.com/v1/artists/${id}`, {
+    const response = await fetchWithTimeout(`https://api.spotify.com/v1/artists/${id}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!response.ok) return [];
@@ -3800,7 +3849,7 @@ async function getSpotifyToken() {
   if (spotifyToken && spotifyToken.expiresAt > Date.now() + 30000) return spotifyToken.accessToken;
 
   const credentials = Buffer.from(`${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`).toString("base64");
-  const response = await fetch("https://accounts.spotify.com/api/token", {
+  const response = await fetchWithTimeout("https://accounts.spotify.com/api/token", {
     method: "POST",
     headers: {
       Authorization: `Basic ${credentials}`,
@@ -3842,8 +3891,49 @@ function spotifyToCatalog(album, genreData = []) {
     durationMin: Math.round(durationMs / 60000),
     coverUrl: album.images?.[0]?.url || "",
     spotifyUrl: album.external_urls?.spotify || "",
-    observations: "Importado do Spotify"
+    observations: ""
   });
+}
+
+function fetchWithTimeout(resource, options = {}, timeoutMs = EXTERNAL_FETCH_TIMEOUT_MS) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  if (!options.signal) return fetch(resource, { ...options, signal: timeoutSignal });
+
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  options.signal.addEventListener("abort", abort, { once: true });
+  timeoutSignal.addEventListener("abort", abort, { once: true });
+  return fetch(resource, { ...options, signal: controller.signal }).finally(() => {
+    options.signal.removeEventListener("abort", abort);
+    timeoutSignal.removeEventListener("abort", abort);
+  });
+}
+
+async function confirmServerReady() {
+  try {
+    const response = await fetchWithTimeout(`http://127.0.0.1:${PORT}/api/health`, {}, 3000);
+    if (!response.ok) throw new Error(`Healthcheck falhou: ${response.status}`);
+    console.log(`MyAlbums pronto em http://localhost:${PORT}`);
+  } catch (error) {
+    console.error(`Servidor abriu a porta ${PORT}, mas nao respondeu ao healthcheck: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+function isRecoverableExternalError(error) {
+  const code = error?.code || error?.cause?.code;
+  return code === "UND_ERR_BODY_TIMEOUT"
+    || code === "UND_ERR_HEADERS_TIMEOUT"
+    || code === "UND_ERR_ABORTED"
+    || code === "UND_ERR_SOCKET"
+    || code === "UND_ERR_CONNECT_TIMEOUT"
+    || code === "ERR_STREAM_PREMATURE_CLOSE"
+    || code === "ECONNRESET"
+    || code === "EPIPE"
+    || error?.name === "AbortError"
+    || error?.name === "TimeoutError"
+    || /UND_ERR_|BodyTimeout|terminated|socket|premature close/i.test(String(error?.message || ""))
+    || /UND_ERR_|BodyTimeout|terminated|socket|premature close/i.test(String(error?.cause?.message || ""));
 }
 
 function readBody(req) {

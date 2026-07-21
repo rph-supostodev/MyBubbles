@@ -35,12 +35,26 @@ function applyMigrations(db) {
   ensureColumn(db, "users", "phone", "TEXT");
   ensureColumn(db, "users", "whatsapp", "TEXT");
   ensureColumn(db, "users", "approval_status", "TEXT NOT NULL DEFAULT 'approved'");
+  ensureColumn(db, "catalog_albums", "collection_registered_at", "TEXT");
   ensureColumn(db, "articles", "scope", "TEXT NOT NULL DEFAULT 'community'");
   ensureColumn(db, "podcast_episodes", "scope", "TEXT NOT NULL DEFAULT 'community'");
   ensureColumn(db, "bubbles", "cover_url", "TEXT");
   db.exec(COMMUNITY_COMMENTS_SQL);
   db.exec(REVIEW_COMMENTS_SQL);
   db.exec(FRIEND_FAVORITES_SQL);
+  db.exec(`
+    UPDATE catalog_albums
+    SET physical_format = 'Vinil'
+    WHERE is_active = 1 AND (physical_format IS NULL OR trim(physical_format) = '');
+
+    UPDATE catalog_albums
+    SET collection_status = 'Na coleção'
+    WHERE is_active = 1 AND (collection_status IS NULL OR trim(collection_status) = '');
+
+    UPDATE catalog_albums
+    SET collection_registered_at = date('now')
+    WHERE is_active = 1 AND (collection_registered_at IS NULL OR trim(collection_registered_at) = '');
+  `);
 }
 
 function ensureColumn(db, tableName, columnName, definition) {
@@ -135,6 +149,7 @@ CREATE TABLE IF NOT EXISTS catalog_albums (
   has_physical TEXT DEFAULT 'Não',
   physical_format TEXT,
   collection_status TEXT,
+  collection_registered_at TEXT,
   cover_url TEXT,
   spotify_url TEXT,
   observations TEXT,
@@ -314,6 +329,8 @@ CREATE INDEX IF NOT EXISTS idx_catalog_user ON catalog_albums(user_id);
 CREATE INDEX IF NOT EXISTS idx_catalog_spotify ON catalog_albums(user_id, spotify_id);
 CREATE INDEX IF NOT EXISTS idx_catalog_active ON catalog_albums(user_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_catalog_identity ON catalog_albums(user_id, artist, album, release_year);
+CREATE INDEX IF NOT EXISTS idx_catalog_collection_filters ON catalog_albums(user_id, is_active, physical_format, genre, collection_status, release_year, collection_registered_at);
+CREATE INDEX IF NOT EXISTS idx_catalog_artist_filter ON catalog_albums(user_id, artist);
 
 CREATE INDEX IF NOT EXISTS idx_logs_user ON listening_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_logs_album ON listening_logs(album_id);

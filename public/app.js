@@ -23,6 +23,7 @@ import {
   Music2,
   Newspaper,
   Phone,
+  Pencil,
   Plus,
   Reply,
   RefreshCw,
@@ -127,12 +128,12 @@ const listLabels = {
 };
 
 const views = [
-  { id: "catalogo", label: "Cadastro Catálogo", icon: Library },
+  { id: "catalogo", label: "Cadastro de Coleção", icon: Library },
   { id: "registro", label: "Registrar Audição", icon: Headphones },
-  { id: "diario", label: "Diário", icon: Calendar },
+  { id: "diario", label: "Diário de Audições", icon: Calendar },
   { id: "news", label: "Comunidade", icon: Newspaper },
-  { id: "bubbles", label: "Bubbles - Fórum", icon: Users },
-  { id: "perfil", label: "Perfil", icon: Users },
+  { id: "bubbles", label: "Bubbles - Fórum", icon: Users, hidden: true },
+  { id: "perfil", label: "Meu Perfil", icon: Users },
   { id: "dashboards", label: "Minhas Estatísticas", icon: BarChart3 },
   { id: "usuarios", label: "Usuários", icon: Users, adminOnly: true },
   { id: "configuracoes", label: "Configurações", icon: Settings, adminOnly: true }
@@ -151,7 +152,7 @@ function App() {
   const [podcastPlayback, setPodcastPlayback] = useState(null);
   const [profileUserId, setProfileUserId] = useState("");
   const [initialBubbleId, setInitialBubbleId] = useState("");
-  const visibleViews = views.filter((item) => !item.adminOnly || user?.role === "admin");
+  const visibleViews = views.filter((item) => !item.hidden && (!item.adminOnly || user?.role === "admin"));
   const activeView = visibleViews.find((item) => item.id === view) || visibleViews[0];
 
   async function loadAll() {
@@ -302,8 +303,7 @@ function PublicVisitorApp({ onLogin, theme, setTheme }) {
   const [toast, setToast] = useState("");
   const [authMode, setAuthMode] = useState("");
   const publicViews = [
-    { id: "news", label: "Comunidade", icon: Newspaper },
-    { id: "bubbles", label: "Bubbles - Fórum", icon: Users }
+    { id: "news", label: "Comunidade", icon: Newspaper }
   ];
   const activeView = publicViews.find((item) => item.id === view) || publicViews[0];
 
@@ -541,6 +541,16 @@ function ThemeToggle({ theme, setTheme, compact = false }) {
 }
 
 function Sidebar({ view, views, setView, spotifyConfigured, theme, setTheme, user, onLogout }) {
+  const personalViewIds = new Set(["catalogo", "registro", "diario", "dashboards"]);
+  const personalViews = views.filter((item) => personalViewIds.has(item.id));
+  const communityViews = views.filter((item) => !personalViewIds.has(item.id));
+  const isPersonalActive = personalViews.some((item) => item.id === view);
+  const renderNavItem = (item, extraClassName = "") => h("button", {
+    key: item.id,
+    className: `nav-item ${extraClassName} ${view === item.id ? "active" : ""}`,
+    onClick: () => setView(item.id)
+  }, h(item.icon, { size: 18 }), h("span", null, item.label), h(ChevronRight, { size: 16, className: "nav-arrow" }));
+
   return h("aside", { className: "sidebar" },
     h("div", { className: "brand" },
       h("div", { className: "brand-mark" },
@@ -549,11 +559,16 @@ function Sidebar({ view, views, setView, spotifyConfigured, theme, setTheme, use
       h("div", null, h("strong", null, "MyAlbums"), h("span", null, "For Music Lovers"))
     ),
     h("nav", { className: "nav-list", "aria-label": "Abas do sistema" },
-      views.map((item) => h("button", {
-        key: item.id,
-        className: `nav-item ${view === item.id ? "active" : ""}`,
-        onClick: () => setView(item.id)
-      }, h(item.icon, { size: 18 }), h("span", null, item.label), h(ChevronRight, { size: 16, className: "nav-arrow" })))
+      h("div", { className: `nav-group ${isPersonalActive ? "active" : ""}` },
+        h("div", { className: "nav-group-title" },
+          h(Disc3, { size: 16 }),
+          h("span", null, "Minha Área")
+        ),
+        h("div", { className: "nav-sublist" },
+          personalViews.map((item) => renderNavItem(item, "nav-subitem"))
+        )
+      ),
+      communityViews.map((item) => renderNavItem(item))
     ),
     h("div", { className: "sidebar-footer" },
       h("div", { className: "display-mode-row" },
@@ -582,7 +597,48 @@ function CatalogView({ db, reload, notify, openRegister }) {
   const [album, setAlbum] = useState("");
   const [results, setResults] = useState([]);
   const [manualOpen, setManualOpen] = useState(false);
+  const [collectionDraft, setCollectionDraft] = useState(null);
+  const [collectionEdit, setCollectionEdit] = useState(null);
+  const [collectionPreview, setCollectionPreview] = useState(null);
+  const [collectionFilters, setCollectionFilters] = useState({
+    physicalFormat: "",
+    genre: "",
+    artist: "",
+    releaseYear: "",
+    collectionStatus: "",
+    registeredFrom: "",
+    registeredTo: ""
+  });
   const [loading, setLoading] = useState(false);
+  const mediaOptions = useMemo(() => uniqueValues(["CD", "Vinil", "K7", "Digital", ...(db.lists.formats || []), ...db.catalog.map((item) => item.physicalFormat)]), [db.lists.formats, db.catalog]);
+  const genreOptions = useMemo(() => uniqueValues([...(db.lists.genres || []), ...db.catalog.map((item) => item.genre)]), [db.lists.genres, db.catalog]);
+  const statusOptions = useMemo(() => uniqueValues(["Na coleção", "Emprestado", "Desejado", "Vendido", "Doado", ...db.catalog.map((item) => item.collectionStatus)]), [db.catalog]);
+  const filteredCatalog = useMemo(() => db.catalog.filter((item) => {
+    const registeredAt = item.collectionRegisteredAt || "";
+    return (!collectionFilters.physicalFormat || item.physicalFormat === collectionFilters.physicalFormat)
+      && (!collectionFilters.genre || item.genre === collectionFilters.genre)
+      && (!collectionFilters.artist || String(item.artist || "").toLocaleLowerCase("pt-BR").includes(collectionFilters.artist.toLocaleLowerCase("pt-BR")))
+      && (!collectionFilters.releaseYear || String(item.releaseYear || "") === String(collectionFilters.releaseYear))
+      && (!collectionFilters.collectionStatus || item.collectionStatus === collectionFilters.collectionStatus)
+      && (!collectionFilters.registeredFrom || (registeredAt && registeredAt >= collectionFilters.registeredFrom))
+      && (!collectionFilters.registeredTo || (registeredAt && registeredAt <= collectionFilters.registeredTo));
+  }), [db.catalog, collectionFilters]);
+
+  function updateCollectionFilter(key, value) {
+    setCollectionFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  function resetCollectionFilters() {
+    setCollectionFilters({
+      physicalFormat: "",
+      genre: "",
+      artist: "",
+      releaseYear: "",
+      collectionStatus: "",
+      registeredFrom: "",
+      registeredTo: ""
+    });
+  }
 
   async function searchSpotify(event) {
     event?.preventDefault();
@@ -604,23 +660,25 @@ function CatalogView({ db, reload, notify, openRegister }) {
     }
   }
 
-  async function importAlbum(item) {
+  async function saveCollectionAlbum(item, mode = "create") {
     await api("/api/catalog", { method: "POST", body: item });
-    notify("Álbum importado para o catálogo.");
+    notify(mode === "edit" ? "Item da coleção atualizado." : "Obra adicionada à sua coleção.");
     setResults([]);
+    setCollectionDraft(null);
+    setCollectionEdit(null);
     await reload();
   }
 
   async function deleteAlbum(id) {
     await api(`/api/catalog/${encodeURIComponent(id)}`, { method: "DELETE" });
-    notify("Álbum removido do catálogo.");
+    notify("Obra removida da coleção.");
     await reload();
   }
 
   return h("div", { className: "screen-grid" },
     h("section", { className: "panel hero-panel" },
       h("div", { className: "panel-title" },
-        h("div", null, h("p", null, "Spotify Web API"), h("h2", null, "Buscar e importar álbuns")),
+        h("div", null, h("p", null, "Spotify Web API"), h("h2", null, "Buscar e importar para a coleção")),
         h(Search, { size: 22 })
       ),
       h("form", { className: "spotify-form", onSubmit: searchSpotify },
@@ -628,28 +686,112 @@ function CatalogView({ db, reload, notify, openRegister }) {
         h(Field, { label: "Álbum" }, h("input", { value: album, onChange: (e) => setAlbum(e.target.value), placeholder: "Ex.: Rubber Soul" })),
         h("button", { className: "primary-btn tall", disabled: loading, type: "submit" }, loading ? h(Loader2, { className: "spin", size: 17 }) : h(Search, { size: 17 }), "Buscar")
       ),
-      results.length ? h("div", { className: "result-grid" }, results.map((item) => h(AlbumCard, { key: item.id, album: item, mode: "import", onImport: importAlbum }))) : null
+      results.length ? h("div", { className: "result-grid" }, results.map((item) => h(AlbumCard, { key: item.id, album: item, mode: "import", onImport: () => setCollectionDraft(item) }))) : null
     ),
     h("section", { className: "panel" },
       h("div", { className: "panel-title" },
-        h("div", null, h("p", null, "Base local"), h("h2", null, "Catálogo de álbuns")),
-        h("button", { className: "ghost-btn", onClick: () => setManualOpen(!manualOpen) }, h(Plus, { size: 16 }), "Cadastro manual")
+        h("div", null, h("p", null, "Minha coleção"), h("h2", null, "Obras cadastradas")),
+        h("button", { className: "ghost-btn", onClick: () => setManualOpen(!manualOpen) }, h(Plus, { size: 16 }), "Adicionar manualmente")
       ),
       manualOpen ? h(ManualCatalogForm, { db, reload, notify, close: () => setManualOpen(false) }) : null,
-      db.catalog.length
-        ? h("div", { className: "result-grid catalog-list" }, db.catalog.map((item) => h(AlbumCard, {
+      db.catalog.length ? h(CollectionFilters, {
+        filters: collectionFilters,
+        mediaOptions,
+        genreOptions,
+        statusOptions,
+        total: db.catalog.length,
+        visible: filteredCatalog.length,
+        onChange: updateCollectionFilter,
+        onReset: resetCollectionFilters
+      }) : null,
+      filteredCatalog.length
+        ? h("div", { className: "result-grid catalog-list" }, filteredCatalog.map((item) => h(AlbumCard, {
             key: item.id,
             album: item,
             mode: "catalog",
             onDelete: deleteAlbum,
+            onEdit: () => setCollectionEdit(item),
+            onPreview: () => setCollectionPreview(item),
             onRegister: () => openRegister(item.id)
           })))
-        : h(EmptyState, { text: "Nenhum álbum cadastrado ainda." })
+        : h(EmptyState, { text: db.catalog.length ? "Nenhuma obra encontrada com esses filtros." : "Nenhuma obra cadastrada na sua coleção ainda." })
+    ),
+    collectionDraft ? h(CollectionImportModal, {
+      album: collectionDraft,
+      formats: mediaOptions,
+      genres: genreOptions,
+      statuses: statusOptions,
+      onClose: () => setCollectionDraft(null),
+      onSave: (item) => saveCollectionAlbum(item, "create")
+    }) : null,
+    collectionEdit ? h(CollectionImportModal, {
+      album: collectionEdit,
+      formats: mediaOptions,
+      genres: genreOptions,
+      statuses: statusOptions,
+      onClose: () => setCollectionEdit(null),
+      onSave: (item) => saveCollectionAlbum(item, "edit"),
+      mode: "edit"
+    }) : null,
+    collectionPreview ? h(CatalogAlbumPreviewModal, {
+      album: collectionPreview,
+      onClose: () => setCollectionPreview(null)
+    }) : null
+  );
+}
+
+function CollectionFilters({ filters, mediaOptions, genreOptions, statusOptions, total, visible, onChange, onReset }) {
+  return h("div", { className: "collection-filters" },
+    h("div", { className: "collection-filters-head" },
+      h("div", null,
+        h("p", null, "Filtros da coleção"),
+        h("strong", null, `${visible} de ${total} obras`)
+      ),
+      h("button", { className: "ghost-btn small", type: "button", onClick: onReset }, "Limpar filtros")
+    ),
+    h("div", { className: "collection-filter-grid" },
+      h(Field, { label: "Mídia na coleção", icon: Disc3 },
+        h("select", { value: filters.physicalFormat, onChange: (event) => onChange("physicalFormat", event.target.value) },
+          h("option", { value: "" }, "Todas"),
+          mediaOptions.map((item) => h("option", { key: item, value: item }, item))
+        )
+      ),
+      h(Field, { label: "Gênero", icon: Music2 },
+        h("select", { value: filters.genre, onChange: (event) => onChange("genre", event.target.value) },
+          h("option", { value: "" }, "Todos"),
+          genreOptions.map((item) => h("option", { key: item, value: item }, item))
+        )
+      ),
+      h(Field, { label: "Artista", icon: Headphones },
+        h("input", { value: filters.artist, onChange: (event) => onChange("artist", event.target.value), placeholder: "Filtrar por artista" })
+      ),
+      h(Field, { label: "Ano de lançamento", icon: Calendar },
+        h("input", { type: "number", value: filters.releaseYear, onChange: (event) => onChange("releaseYear", event.target.value), placeholder: "Ex.: 1976" })
+      ),
+      h(Field, { label: "Status da coleção", icon: Check },
+        h("select", { value: filters.collectionStatus, onChange: (event) => onChange("collectionStatus", event.target.value) },
+          h("option", { value: "" }, "Todos"),
+          statusOptions.map((item) => h("option", { key: item, value: item }, item))
+        )
+      ),
+      h(Field, { label: "Data de registro: de", icon: Calendar },
+        h("input", { type: "date", value: filters.registeredFrom, onChange: (event) => onChange("registeredFrom", event.target.value) })
+      ),
+      h(Field, { label: "Data de registro: até", icon: Calendar },
+        h("input", { type: "date", value: filters.registeredTo, onChange: (event) => onChange("registeredTo", event.target.value) })
+      )
     )
   );
 }
 
-function AlbumCard({ album, mode, onImport, onDelete, onRegister }) {
+function AlbumCard({ album, mode, onImport, onDelete, onEdit, onPreview, onRegister }) {
+  const isCatalog = mode === "catalog";
+  const collectionDetails = [
+    `${album.tracks || 0} faixas`,
+    album.physicalFormat,
+    album.collectionStatus
+  ].filter(Boolean);
+
   return h("article", { className: "album-card" },
     album.coverUrl
       ? h("img", { className: "album-cover", src: album.coverUrl, alt: "" })
@@ -657,15 +799,145 @@ function AlbumCard({ album, mode, onImport, onDelete, onRegister }) {
     h("div", { className: "album-copy" },
       h("div", null,
         h("h3", null, album.album),
-        h("p", null, `${album.artist || "Artista não informado"} · ${album.releaseYear || "s/ ano"} · ${album.tracks || 0} faixas`)
+        h("p", null, isCatalog
+          ? `${album.artist || "Artista não informado"} · ${album.releaseYear || "s/ ano"}`
+          : `${album.artist || "Artista não informado"} · ${album.releaseYear || "s/ ano"} · ${album.tracks || 0} faixas`
+        ),
+        isCatalog
+          ? h("div", { className: "album-collection-details" },
+              collectionDetails.map((detail) => h("em", { key: detail, className: "album-collection-meta" }, detail))
+            )
+          : null
       ),
-      h("div", { className: "album-actions" },
+      h("div", { className: `album-actions ${isCatalog ? "catalog-card-actions" : ""}` },
         mode === "import"
           ? h("button", { className: "primary-btn small", onClick: () => onImport(album) }, h(Plus, { size: 15 }), "Importar")
           : [
-              h("button", { key: "register", className: "ghost-btn small", onClick: onRegister }, h(Headphones, { size: 15 }), "Registrar"),
-              h("button", { key: "delete", className: "danger-btn small", onClick: () => onDelete(album.id) }, h(Trash2, { size: 15 }), "Excluir")
+              h("button", { key: "preview", className: "ghost-btn small", onClick: onPreview }, h(Eye, { size: 14 }), "Visualizar"),
+              h("button", { key: "register", className: "ghost-btn small", onClick: onRegister }, h(Plus, { size: 14 }), "Audição"),
+              h("button", { key: "edit", className: "ghost-btn small", onClick: onEdit }, h(Pencil, { size: 14 }), "Editar"),
+              h("button", { key: "delete", className: "danger-btn small", onClick: () => onDelete(album.id) }, h(Trash2, { size: 14 }), "Excluir")
             ]
+      )
+    )
+  );
+}
+
+function CollectionImportModal({ album, formats = [], genres = [], statuses = [], onClose, onSave, mode = "create" }) {
+  useEscapeToClose(onClose);
+  const isEditing = mode === "edit";
+  const mediaOptions = uniqueValues(["CD", "Vinil", "K7", "Digital", ...(formats || [])]);
+  const genreOptions = uniqueValues([...(genres || []), album.genre]);
+  const statusOptions = uniqueValues(["Na coleção", "Emprestado", "Desejado", "Vendido", "Doado", ...(statuses || [])]);
+  const fullReleaseDate = /^\d{4}-\d{2}-\d{2}$/.test(album.releaseDate || "") ? album.releaseDate : "";
+  const [albumTitle, setAlbumTitle] = useState(album.album || "");
+  const [artistName, setArtistName] = useState(album.artist || "");
+  const [releaseDate, setReleaseDate] = useState(fullReleaseDate);
+  const [releaseYear, setReleaseYear] = useState(album.releaseYear || yearFromDate(album.releaseDate) || "");
+  const [genre, setGenre] = useState(album.genre || "");
+  const [subgenre, setSubgenre] = useState(album.subgenre || "");
+  const [physicalFormat, setPhysicalFormat] = useState(album.physicalFormat || "Digital");
+  const [collectionRegisteredAt, setCollectionRegisteredAt] = useState(album.collectionRegisteredAt || today());
+  const [collectionStatus, setCollectionStatus] = useState(album.collectionStatus || "Na coleção");
+  const [observations, setObservations] = useState(isEditing ? album.observations || "" : "");
+  const [saving, setSaving] = useState(false);
+
+  async function save(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onSave({
+        ...album,
+        album: albumTitle,
+        artist: artistName,
+        releaseDate,
+        releaseYear,
+        genre,
+        subgenre,
+        physicalFormat,
+        hasPhysical: physicalFormat === "Digital" ? "Não" : "Sim",
+        collectionStatus,
+        collectionRegisteredAt,
+        observations
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return h("div", { className: "modal-backdrop", role: "presentation", onMouseDown: onClose },
+    h("section", { className: "catalog-modal collection-import-modal", role: "dialog", "aria-modal": "true", "aria-label": isEditing ? "Editar item da coleção" : "Adicionar à coleção", onMouseDown: (event) => event.stopPropagation() },
+      h("div", { className: "modal-head" },
+        h("div", null,
+          h("p", null, "Cadastro de coleção"),
+          h("h2", null, isEditing ? "Editar item da coleção" : "Adicionar obra")
+        ),
+        h("button", { className: "ghost-btn small", type: "button", onClick: onClose }, "Fechar")
+      ),
+      h("div", { className: "collection-import-hero" },
+        album.coverUrl
+          ? h("img", { src: album.coverUrl, alt: "" })
+          : h("div", { className: "album-cover placeholder" }, h(Disc3, { size: 30 })),
+        h("div", null,
+          h("strong", null, albumTitle || "Álbum"),
+          h("span", null, `${artistName || "Artista não informado"} · ${releaseYear || "s/ ano"} · ${album.tracks || 0} faixas`),
+          genre ? h("em", null, genre) : null
+        )
+      ),
+      h("form", { className: "form-grid collection-import-form", onSubmit: save },
+        h("div", { className: "field" },
+          h("span", null, h(Library, { size: 14 }), "Álbum"),
+          h("input", { value: albumTitle, onChange: (event) => setAlbumTitle(event.target.value), required: true })
+        ),
+        h("div", { className: "field" },
+          h("span", null, h(Headphones, { size: 14 }), "Artista"),
+          h("input", { value: artistName, onChange: (event) => setArtistName(event.target.value), required: true })
+        ),
+        h("div", { className: "field" },
+          h("span", null, h(Calendar, { size: 14 }), "Data de lançamento"),
+          h("input", { type: "date", value: releaseDate, onChange: (event) => {
+            setReleaseDate(event.target.value);
+            if (event.target.value) setReleaseYear(yearFromDate(event.target.value));
+          } })
+        ),
+        h("div", { className: "field" },
+          h("span", null, h(Calendar, { size: 14 }), "Ano de lançamento"),
+          h("input", { type: "number", value: releaseYear, onChange: (event) => setReleaseYear(event.target.value), placeholder: "Ex.: 1976" })
+        ),
+        h("div", { className: "field" },
+          h("span", null, h(Disc3, { size: 14 }), "Mídia na coleção"),
+          h("select", { value: physicalFormat, onChange: (event) => setPhysicalFormat(event.target.value) },
+            mediaOptions.map((item) => h("option", { key: item, value: item }, item))
+          )
+        ),
+        h("div", { className: "field" },
+          h("span", null, h(Calendar, { size: 14 }), "Data de registro"),
+          h("input", { type: "date", value: collectionRegisteredAt, onChange: (event) => setCollectionRegisteredAt(event.target.value) })
+        ),
+        h("div", { className: "field" },
+          h("span", null, h(Check, { size: 14 }), "Status da coleção"),
+          h("input", { value: collectionStatus, onChange: (event) => setCollectionStatus(event.target.value), list: "collection-status-options", placeholder: "Ex.: Na coleção, emprestado..." }),
+          h("datalist", { id: "collection-status-options" }, statusOptions.map((item) => h("option", { key: item, value: item })))
+        ),
+        h("div", { className: "field" },
+          h("span", null, h(Music2, { size: 14 }), "Gênero"),
+          h("input", { value: genre, onChange: (event) => setGenre(event.target.value), list: "collection-genre-options", placeholder: "Ex.: Rock" }),
+          h("datalist", { id: "collection-genre-options" }, genreOptions.map((item) => h("option", { key: item, value: item })))
+        ),
+        h("div", { className: "field" },
+          h("span", null, h(Music2, { size: 14 }), "Subgênero"),
+          h("input", { value: subgenre, onChange: (event) => setSubgenre(event.target.value), placeholder: "Ex.: Classic Rock" })
+        ),
+        h("div", { className: "field span-all" },
+          h("span", null, h(BookOpen, { size: 14 }), "Observações da coleção"),
+          h("textarea", { value: observations, onChange: (event) => setObservations(event.target.value), rows: 3, placeholder: "Ex.: edição remasterizada, comprado em feira, item emprestado..." })
+        ),
+        h("div", { className: "form-actions span-all" },
+          h("button", { className: "primary-btn", type: "submit", disabled: saving },
+            saving ? h(Loader2, { className: "spin", size: 16 }) : h(Plus, { size: 16 }),
+            saving ? "Salvando..." : isEditing ? "Salvar alterações" : "Adicionar à coleção"
+          )
+        )
       )
     )
   );
@@ -2009,7 +2281,7 @@ function CommunityNewsDetailModal({ item, onClose }) {
   const paragraphs = articleParagraphs(item.content || item.summary);
   const readingTime = Math.max(1, Math.ceil((item.content || item.summary || "").split(/\s+/).filter(Boolean).length / 220));
 
-  return h("div", { className: "modal-backdrop", role: "presentation", onMouseDown: onClose },
+  return h("div", { className: "modal-backdrop news-modal-backdrop", role: "presentation", onMouseDown: onClose },
     h("section", { className: "catalog-modal community-news-modal", role: "dialog", "aria-modal": "true", "aria-label": "Leitura da not?cia", onMouseDown: (event) => event.stopPropagation() },
       h("button", { className: "ghost-btn small community-news-close", type: "button", onClick: onClose }, "Fechar"),
       h("header", { className: "community-news-head" },
@@ -2374,6 +2646,7 @@ function ManualCatalogForm({ db, reload, notify, close }) {
   return h("form", { className: "form-grid inline-form", onSubmit: save },
     h(InputField, { name: "album", label: "Álbum" }),
     h(InputField, { name: "artist", label: "Artista" }),
+    h(InputField, { name: "releaseDate", label: "Data lançamento", type: "date" }),
     h(InputField, { name: "releaseYear", label: "Ano lançamento", type: "number" }),
     h(SelectField, { name: "genre", label: "Gênero", options: db.lists.genres }),
     h(InputField, { name: "subgenre", label: "Subgênero" }),
@@ -2382,8 +2655,9 @@ function ManualCatalogForm({ db, reload, notify, close }) {
     h(InputField, { name: "tracks", label: "Faixas", type: "number" }),
     h(InputField, { name: "durationMin", label: "Duração min", type: "number" }),
     h(SelectField, { name: "hasPhysical", label: "Tenho físico?", options: db.lists.yesNo, defaultValue: "Não" }),
-    h(SelectField, { name: "physicalFormat", label: "Formato físico", options: db.lists.formats }),
-    h(InputField, { name: "collectionStatus", label: "Status coleção" }),
+    h(SelectField, { name: "physicalFormat", label: "Mídia na coleção", options: uniqueValues(["CD", "Vinil", "K7", "Digital", ...(db.lists.formats || [])]) }),
+    h(InputField, { name: "collectionRegisteredAt", label: "Data de registro", type: "date", defaultValue: today() }),
+    h(InputField, { name: "collectionStatus", label: "Status coleção", defaultValue: "Na coleção" }),
     h(TextAreaField, { name: "observations", label: "Observações" }),
     h("div", { className: "form-actions" }, h("button", { className: "primary-btn", type: "submit" }, h(Check, { size: 16 }), "Salvar álbum"))
   );
@@ -2393,6 +2667,7 @@ function RegisterView({ db, reload, notify, selectedCatalogId }) {
   const [catalogId, setCatalogId] = useState(selectedCatalogId || "");
   const [pickerOpen, setPickerOpen] = useState(false);
   const selected = db.catalog.find((item) => item.id === catalogId) || null;
+  const formatOptions = uniqueValues(["CD", "Vinil", "K7", "Digital", ...(db.lists.formats || [])]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -2447,7 +2722,7 @@ function RegisterView({ db, reload, notify, selectedCatalogId }) {
               )
             ),
             h(InputField, { name: "date", label: "Data", icon: Calendar, type: "date", defaultValue: today() }),
-            h(SelectField, { name: "format", label: "Formato", icon: Disc3, options: db.lists.formats }),
+            h(SelectField, { name: "format", label: "Formato", icon: Disc3, options: formatOptions, defaultValue: selected?.physicalFormat || "" }),
             h(SelectField, { name: "platform", label: "Plataforma/Mídia", icon: Headphones, options: db.lists.platforms }),
             h(SelectField, { name: "listeningType", label: "Tipo de audição", icon: Headphones, options: db.lists.listeningTypes }),
             h(SelectField, { name: "genre", label: "Gênero", icon: Music2, options: db.lists.genres, defaultValue: selected?.genre || "" }),
@@ -2553,7 +2828,10 @@ function CatalogAlbumPreviewModal({ album, onClose, onAdd }) {
     [Music2, "G\u00eanero", album.genre || "Sem classifica\u00e7\u00e3o"],
     [Disc3, "Subg\u00eanero", album.subgenre || "Sem subg\u00eanero"],
     [Library, "Faixas", album.tracks ? `${album.tracks} faixas` : "Sem faixas"],
-    [Clock, "Dura\u00e7\u00e3o", album.durationMin ? `${album.durationMin} min` : "Sem dura\u00e7\u00e3o"]
+    [Clock, "Dura\u00e7\u00e3o", album.durationMin ? `${album.durationMin} min` : "Sem dura\u00e7\u00e3o"],
+    [Disc3, "M\u00eddia na cole\u00e7\u00e3o", album.physicalFormat || "N\u00e3o informada"],
+    [Check, "Status", album.collectionStatus || "Na cole\u00e7\u00e3o"],
+    [Calendar, "Registro", album.collectionRegisteredAt ? formatDate(album.collectionRegisteredAt) : "Sem data"]
   ];
 
   return h("div", {
@@ -2591,7 +2869,7 @@ function CatalogAlbumPreviewModal({ album, onClose, onAdd }) {
             ))
           ),
           h("div", { className: "album-preview-actions" },
-            h("button", { className: "primary-btn", type: "button", onClick: onAdd }, h(Plus, { size: 16 }), "Adicionar"),
+            onAdd ? h("button", { className: "primary-btn", type: "button", onClick: onAdd }, h(Plus, { size: 16 }), "Adicionar") : null,
             album.spotifyUrl ? h("a", { className: "ghost-link", href: album.spotifyUrl, target: "_blank", rel: "noreferrer" }, "Abrir no Spotify") : null
           )
         )
@@ -3411,7 +3689,7 @@ function ProfileView({ user, db, setUser, notify, profileUserId, openPublicProfi
     ) : null,
     h("nav", { className: "community-tabs profile-content-tabs", "aria-label": "Areas do perfil" },
       [
-        ["overview", "Meus Albums e Bubbles", "Favoritos, reviews e comunidades", Disc3],
+        ["overview", "Meus Álbuns", "Favoritos, reviews e audições", Disc3],
         ["articles", "Meus Artigos", "Textos publicados no perfil", BookOpen],
         ["podcasts", "Meus Podcasts", "Episodios publicados no perfil", Headphones]
       ].map(([id, label, description, Icon]) =>
@@ -3430,13 +3708,6 @@ function ProfileView({ user, db, setUser, notify, profileUserId, openPublicProfi
       )
     ),
     h("div", { className: "profile-public-grid" },
-      profileTab === "overview" ? h(ProfileBubblesSection, {
-        owned: profileBubbles.owned,
-        member: profileBubbles.member,
-        isOwnProfile,
-        onJoin: requestProfileBubbleJoin,
-        onOpenBubble: openBubble
-      }) : null,
       profileTab === "articles" ? h(ProfileEditorialSection, {
         title: "Meus Artigos",
         subtitle: isOwnProfile ? "Textos publicados no seu perfil" : "Artigos publicados neste perfil",
@@ -3909,6 +4180,10 @@ async function api(url, options = {}) {
 
 function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
+}
+
+function uniqueValues(values = []) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
 function getMetrics(log) {
