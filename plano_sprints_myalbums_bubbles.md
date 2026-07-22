@@ -20,6 +20,17 @@ Use esta legenda:
 [x] Concluído
 ```
 
+## Nota de reconciliação (22/07/2026)
+
+Este plano foi conferido diretamente contra o código em produção (`server.js`, `src/database.js`, schema do `data/myalbums.sqlite`) e o histórico do Git. Os status abaixo foram atualizados para refletir o que já está implementado, não apenas o planejado.
+
+Resumo do que mudou nesta revisão:
+
+- Sprint 6 (News global) e Sprint 7 (Newsletter/Artigos) estavam marcadas como pendentes, mas já estão implementadas no código e foram marcadas como concluídas.
+- Sprint 10 teve o item de modo dark/light marcado como em andamento, já que há trabalho recente e ainda não commitado em `public/styles.css`.
+- Foi criada a Sprint 13 para documentar módulos que já existem no sistema mas nunca entraram neste plano: Podcasts, Comunidade (feed unificado), Reviews/comentários, Meus Queridos Amigos e cadastro público com aprovação do administrador.
+- Há alterações locais ainda não commitadas em `public/app.js` e `public/styles.css` (ver `git status`). Antes de considerar qualquer sprint abaixo "fechada" em produção, confirme se essas mudanças precisam ser commitadas primeiro.
+
 ---
 
 # Sprint 0 — Preparação da Nova Base
@@ -257,19 +268,19 @@ Transformar a News em uma área global com cache persistido no SQLite, evitando 
 
 ## Tarefas
 
-- [ ] Migrar cache de News para tabela `news_releases`.
-- [ ] Criar rota `GET /api/news/releases`.
-- [ ] Criar rota `POST /api/news/releases/refresh`.
-- [ ] Definir lista oficial de artistas monitorados.
-- [ ] Sortear poucos artistas por atualização.
-- [ ] Consultar Spotify de forma controlada.
-- [ ] Salvar resultados novos em `news_releases`.
-- [ ] Retornar cache imediatamente.
-- [ ] Implementar cooldown quando Spotify retornar rate limit.
-- [ ] Exibir mensagem discreta quando News estiver usando cache.
-- [ ] Criar importação da News para catálogo pessoal.
-- [ ] Evitar duplicidade no catálogo do usuário.
-- [ ] Botão de Atualizar News vai ficar disponível apenas para usuários do nível de Administrador 
+- [x] Migrar cache de News para tabela `news_releases`.
+- [x] Criar rota `GET /api/news/releases`.
+- [x] Criar rota `POST /api/news/releases/refresh`.
+- [x] Definir lista oficial de artistas monitorados.
+- [x] Sortear poucos artistas por atualização.
+- [x] Consultar Spotify de forma controlada.
+- [x] Salvar resultados novos em `news_releases`.
+- [x] Retornar cache imediatamente.
+- [x] Implementar cooldown quando Spotify retornar rate limit.
+- [x] Exibir mensagem discreta quando News estiver usando cache.
+- [x] Criar importação da News para catálogo pessoal.
+- [x] Evitar duplicidade no catálogo do usuário.
+- [x] Botão de Atualizar News vai ficar disponível apenas para usuários do nível de Administrador 
 
 ## Critérios de aceite
 
@@ -278,6 +289,10 @@ Transformar a News em uma área global com cache persistido no SQLite, evitando 
 - Atualização da News não depende do catálogo pessoal.
 - Importar da News salva no catálogo do usuário logado.
 - Sistema não sobrecarrega a API.
+
+## Nota técnica
+
+Confirmado em `server.js`: `NEWS_ARTISTS` (lista oficial), `NEWS_REFRESH_COOLDOWN_MS`, `spotifyRateLimitedUntil`, `readCommunityNews` / `refreshCommunityNews` e cache em `news_releases` / `community_news_cache`. A rota `POST /api/news/releases/refresh` exige `requireAdmin`.
 
 ---
 
@@ -289,21 +304,21 @@ Adicionar área editorial dentro da experiência de comunidade, com artigos gere
 
 ## Tarefas
 
-- [ ] Criar endpoints de artigos.
-- [ ] Criar listagem pública de artigos publicados.
-- [ ] Criar modal/página de leitura de artigo.
-- [ ] Criar editor de artigo para admin.
-- [ ] Permitir status:
-  - [ ] rascunho
-  - [ ] publicado
-  - [ ] arquivado
-- [ ] Gerar slug único.
-- [ ] Permitir capa, resumo e conteúdo.
-- [ ] Proteger criação, edição e exclusão para admin.
-- [ ] Ocultar rascunhos de usuários comuns.
-- [ ] Criar tela Artigos apenas para usuário do tipo Administrador
-- [ ] Os artigos são publicados na aba comunidade
-- [ ] Layout dos artigos segue o layout da aba comunidade
+- [x] Criar endpoints de artigos.
+- [x] Criar listagem pública de artigos publicados.
+- [x] Criar modal/página de leitura de artigo.
+- [x] Criar editor de artigo para admin.
+- [x] Permitir status:
+  - [x] rascunho
+  - [x] publicado
+  - [x] arquivado
+- [x] Gerar slug único.
+- [x] Permitir capa, resumo e conteúdo.
+- [x] Proteger criação, edição e exclusão para admin.
+- [x] Ocultar rascunhos de usuários comuns.
+- [x] Criar tela Artigos apenas para usuário do tipo Administrador
+- [x] Os artigos são publicados na aba comunidade
+- [x] Layout dos artigos segue o layout da aba comunidade
 
 ## Critérios de aceite
 
@@ -313,6 +328,10 @@ Adicionar área editorial dentro da experiência de comunidade, com artigos gere
 - Admin arquiva artigo.
 - Usuário comum vê apenas artigos publicados na área Comunidade.
 - Usuário comum não acessa editor.
+
+## Nota técnica
+
+Confirmado em `server.js` (`handleArticlesApi`, tabela `articles`): rotas `GET/POST/PUT/DELETE /api/articles`, criação/edição/exclusão exigem `requireAdmin`, listagem usa `listArticlesForUser` (filtra por status conforme perfil) e há comentários de comunidade vinculados ao artigo (`community_comments`) com moderação por autor/admin.
 
 ---
 
@@ -394,7 +413,7 @@ Refinar a experiência visual e os fluxos após a base funcional estar pronta.
 - [ ] Criar estados vazios para Bubbles e Newsletter.
 - [ ] Criar feedbacks claros para ações bloqueadas.
 - [ ] Revisar responsividade.
-- [ ] Revisar modo dark/light.
+- [~] Revisar modo dark/light. (há alterações em `public/styles.css` ainda não commitadas)
 - [ ] Revisar modais.
 - [ ] Revisar textos e acentos.
 - [ ] Padronizar botões e ícones.
@@ -466,3 +485,24 @@ Organizar a base para recursos futuros sem travar a entrega inicial.
 - A arquitetura atual não impede essas evoluções.
 - O modelo de dados permanece coerente.
 - A implementação inicial continua simples.
+
+---
+
+# Sprint 13 — Recursos Adicionais Implementados (fora do plano original)
+
+## Objetivo
+
+Registrar módulos que já foram construídos e estão em produção, mas nunca haviam sido descritos neste plano de sprints. Servem apenas como registro retroativo, não como pendência.
+
+## Módulos identificados no código
+
+- [x] **Podcasts** — rota `/api/podcasts`, tabela `podcast_episodes`, listagem pública e gestão de episódios.
+- [x] **Comunidade (feed unificado)** — rota `/api/community-content`, agregando News, Artigos e Podcasts em uma única aba.
+- [x] **Reviews / comentários em avaliações** — rota `/api/reviews/`, tabela `review_comments`, permite comentar audições/avaliações registradas.
+- [x] **Meus Queridos Amigos** — rota `/api/mydearfriends`, tabela `friend_favorites`, perfis públicos de usuário (`/api/profiles/:id`) e favoritar outros usuários.
+- [x] **Cadastro público com aprovação do administrador** — rota `POST /api/auth/register`, campo `approval_status` (`pending`, `approved`, `rejected`) na tabela `users`; login é bloqueado até aprovação do admin.
+- [x] **Máscara de telefone/WhatsApp brasileira** — campos `phone`/`whatsapp` no cadastro, com máscara aplicada no frontend.
+
+## Observação
+
+Como esses módulos não têm regras de negócio formalizadas em `regras_negocio_myalbums_comunidade.md` nem tabelas descritas em `modelo_tecnico_dados_myalbums_bubbles.md`, recomenda-se atualizar esses dois documentos para incluir Podcasts, Reviews, Meus Queridos Amigos e o fluxo de aprovação de cadastro — hoje eles existem apenas no código.

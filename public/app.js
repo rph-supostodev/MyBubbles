@@ -3475,6 +3475,11 @@ function ProfileView({ user, db, setUser, notify, profileUserId, openPublicProfi
   const profileBubbles = publicProfile?.bubbles || { owned: [], member: [] };
   const profileArticles = publicProfile?.articles || [];
   const profilePodcasts = publicProfile?.podcasts || [];
+  const profileCollection = useMemo(() => [...(viewedDb?.catalog || [])].sort((a, b) => {
+    const dateA = a.collectionRegisteredAt || a.createdAt || "";
+    const dateB = b.collectionRegisteredAt || b.createdAt || "";
+    return String(dateB).localeCompare(String(dateA));
+  }), [viewedDb?.catalog]);
   const logs = useMemo(() => [...(viewedDb?.listeningLog || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))), [viewedDb?.listeningLog]);
   const metrics = useMemo(() => getMetrics(logs), [logs]);
   const recentActivity = logs.slice(0, 8);
@@ -3690,6 +3695,7 @@ function ProfileView({ user, db, setUser, notify, profileUserId, openPublicProfi
     h("nav", { className: "community-tabs profile-content-tabs", "aria-label": "Areas do perfil" },
       [
         ["overview", "Meus Álbuns", "Favoritos, reviews e audições", Disc3],
+        ["collection", "Minha Coleção", "Vitrine de obras cadastradas", Library],
         ["articles", "Meus Artigos", "Textos publicados no perfil", BookOpen],
         ["podcasts", "Meus Podcasts", "Episodios publicados no perfil", Headphones]
       ].map(([id, label, description, Icon]) =>
@@ -3731,6 +3737,7 @@ function ProfileView({ user, db, setUser, notify, profileUserId, openPublicProfi
         onDelete: deleteProfilePodcast,
         onPodcastPlaybackChange
       }) : null,
+      profileTab === "collection" ? h(ProfileCollectionSection, { items: profileCollection }) : null,
       profileTab === "overview" ? h("section", { className: "profile-public-section" },
         h("div", { className: "profile-section-head" },
           h("h3", null, "Álbuns favoritos"),
@@ -3852,6 +3859,47 @@ function ProfileEditorialSection({ title, subtitle, items, isOwnProfile, type, o
           ))
         )
       : h(EmptyState, { text: emptyText })
+  );
+}
+
+function ProfileCollectionSection({ items }) {
+  return h("section", { className: "profile-public-section profile-collection-section" },
+    h("div", { className: "profile-section-head" },
+      h("div", null,
+        h("h3", null, "Minha Coleção"),
+        h("span", null, "Obras cadastradas neste perfil")
+      ),
+      h("span", null, `${items.length} obra${items.length === 1 ? "" : "s"}`)
+    ),
+    items.length
+      ? h("div", { className: "profile-collection-grid" },
+          items.map((item) => h(ProfileCollectionCard, { key: item.id, item }))
+        )
+      : h(EmptyState, { text: "Nenhuma obra cadastrada na coleção ainda." })
+  );
+}
+
+function ProfileCollectionCard({ item }) {
+  const details = [
+    item.tracks ? `${item.tracks} faixas` : "",
+    item.physicalFormat || "",
+    item.collectionStatus || ""
+  ].filter(Boolean);
+
+  return h("article", { className: "profile-collection-card" },
+    h(SafeImage, {
+      src: item.coverUrl,
+      className: "profile-collection-cover",
+      fallbackClassName: "profile-collection-cover profile-collection-fallback",
+      fallbackIcon: h(Disc3, { size: 22 })
+    }),
+    h("div", { className: "profile-collection-copy" },
+      h("h4", null, item.album || "Álbum"),
+      h("p", null, `${item.artist || "Artista"} · ${item.releaseYear || "sem ano"}`),
+      details.length ? h("div", { className: "profile-collection-pills" },
+        details.map((detail) => h("em", { key: detail }, detail))
+      ) : null
+    )
   );
 }
 
